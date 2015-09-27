@@ -1,0 +1,107 @@
+<?php
+require_once('Logger.php');
+
+class vkApi {
+  private $token;
+  private $lang = 'ru';
+  private $v = '5.37';
+  private $https = '1';
+
+  function __construct($token) {
+    $this->token = $token;
+
+    Logger::init('vkApi', LOG_PERROR);
+  }
+
+  public function call($method, $parameters = array()) {
+    $parameters['token'] = $this->token; 
+    $parameters['lang'] = $this->lang; 
+    $parameters['v'] = $this->v; 
+    $parameters['https'] = $this->https; 
+
+    $params = array();
+    foreach ($parameters as $k => $v) {
+      array_push($params, $k. '='. $v);
+    }
+    $url = 'https://api.vk.com/method/'. $method. '?'. implode('&', $params);
+    Logger::log(LOG_DEBUG, "url: $url");
+    $result = json_decode(file_get_contents($url));
+    return $result;
+  }
+
+  public function get_users($ids, $fields = array(), $name_case = 'nom') {
+    if (is_array($ids))
+      $ids = implode(',', $ids);
+    return $this->call('users.get', array('user_ids' => $ids, 'fields' => implode(',', $fields), 'name_case' => $name_case));
+  }
+
+  public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile'), $name_case = 'nom') {
+    $result = $this->get_users($id, $fields, $name_case);
+    if (!property_exists($result, 'response'))
+      throw new Exception('No response property');
+
+    if (!is_array($result->{'response'}))
+      throw new Exception('Response is not array');
+
+    if (count($result->{'response'}) != 1 )
+      throw new Exception('Response have '. count($result->{'response'}). ' items');
+
+    return $result->{'response'}[0];
+  }
+
+  public function get_online($user_id) {
+    $info = $this->get_user($user_id, array('online', 'last_seen', 'online_mobile'));
+    if (!is_object($info))
+      throw new Exception('info is not object');
+
+    if (!property_exists($info, 'id'))
+      throw new Exception('No id property');
+
+    if ($user_id != $info->{'id'})
+      throw new Exception("user_id ($user_id) != id (". $info->{'id'}. ')');
+
+    return $this->get_online_by_info($info);
+  }
+
+  public function get_online_by_info($info) {
+    if (!is_object($info))
+      throw new Exception('info is not object');
+
+    if (!property_exists($info, 'id'))
+      throw new Exception('No id property');
+
+    if (!property_exists($info, 'online'))
+      throw new Exception('No online property');
+
+    $result = array();
+    $result['mobile'] = 0;
+    $result['platform'] = 7;
+    $result['last_seen'] = NULL;
+    $result['app'] = NULL;
+
+    $result['user_id'] = $info->{'id'};
+    $result['online'] = $info->{'online'};
+    if ($result['online'])
+      $result['last_seen'] = $this->get_time();
+  
+    if (property_exists($info, 'online_mobile'))
+      $result['mobile'] = $info->{'online_mobile'};
+
+    if (property_exists($info, 'online_app'))
+      $result['app'] = $info->{'online_app'};
+
+    if (property_exists($info, 'last_seen')) {
+      if (is_object($info->{'last_seen'})) {
+        if (property_exists($info->{'last_seen'}, 'platform'))
+          $result['platform'] = $info->{'last_seen'}->{'platform'};
+        if (property_exists($info->{'last_seen'}, 'time'))
+          $result['last_seen'] = $info->{'last_seen'}->{'time'};
+      }
+    }
+    return $result;
+  }
+
+  public function get_time() {
+    return time();
+  }
+}

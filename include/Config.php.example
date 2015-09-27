@@ -1,0 +1,13 @@
+<?php
+
+final class Config {
+  const TOKEN = '';
+
+  const DB_LOGIN = '';
+  const DB_PASSWORD = '';
+  const DB_HOST = '';
+  const DB_NAME = '';
+
+}
+
+?>
