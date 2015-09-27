@@ -17,22 +17,39 @@ class vkTools {
     Logger::init('vkTools', LOG_PERROR);
   }
 
-  public function merge_sessions($user_id, $diff = 14*60) {
+  public function merge_sessions($diff = 14*60) {
+#    Logger::$debug = true;
     $this->db->beginTransaction();
-    $sth = $this->db->prepare('SELECT id, since, till, platform, mobile, app FROM online WHERE user_id = :user_id FOR UPDATE');
-    $sth->execute(array('user_id' => $user_id));
 
-    $update_sth = $this->db->prepare('UPDATE online SET since = :since WHERE id = :id');
-    $delete_sth = $this->db->prepare('DELETE FROM online WHERE id = :id');
-    $prev = $sth->fetch(PDO::FETCH_ASSOC);
-    while ($info = $sth->fetch(PDO::FETCH_ASSOC)) {
-      if ($prev['platform'] == $info['platform'] && $prev['mobile'] == $info['mobile'] && $prev['app'] == $info['app'] && $info['since'] - $prev['till'] < $diff) {
-        $update_sth->execute(array('since' => $prev['since'], 'id' => $info['id']));
-        $delete_sth->execute(array('id' => $prev['id']));
-        $prev['id'] = $info['id'];
-        $prev['till'] = $info['till'];
+    $sth_key = $this->db->query('SELECT user_id, platform, mobile, app FROM online GROUP BY user_id, platform, mobile, app');
+
+    $sth_null = $this->db->prepare(
+        'SELECT id, since, till, platform, mobile, app FROM online WHERE user_id = :user_id AND platform = :platform AND mobile = :mobile AND app is NULL FOR UPDATE');
+    $sth_not_null = $this->db->prepare(
+        'SELECT id, since, till, platform, mobile, app FROM online WHERE user_id = :user_id AND platform = :platform AND mobile = :mobile AND app = :app FOR UPDATE');
+
+    while ($key = $sth_key->fetch(PDO::FETCH_ASSOC)) {
+
+      if (isset($key['app'])) {
+        $sth = $sth_not_null;
+        $sth->execute(array('user_id' => $key['user_id'], 'platform' => $key['platform'], 'mobile' => $key['mobile'], 'app' => $key['app']));
       } else {
-        $prev = $info;
+        $sth = $sth_null;
+        $sth->execute(array('user_id' => $key['user_id'], 'platform' => $key['platform'], 'mobile' => $key['mobile']));
+      }
+
+      $update_sth = $this->db->prepare('UPDATE online SET since = :since WHERE id = :id');
+      $delete_sth = $this->db->prepare('DELETE FROM online WHERE id = :id');
+      $prev = $sth->fetch(PDO::FETCH_ASSOC);
+      while ($info = $sth->fetch(PDO::FETCH_ASSOC)) {
+        if ($info['since'] - $prev['till'] < $diff) {
+          $update_sth->execute(array('since' => $prev['since'], 'id' => $info['id']));
+          $delete_sth->execute(array('id' => $prev['id']));
+          $prev['id'] = $info['id'];
+          $prev['till'] = $info['till'];
+        } else {
+          $prev = $info;
+        }
       }
     }
     $this->db->commit();
