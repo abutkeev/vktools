@@ -8,6 +8,7 @@ final class Config {
   const DB_HOST = '';
   const DB_NAME = '';
 
+  const TG_TOKEN = '';
 }
 
 ?>

@@ -1,0 +1,3 @@
+[submodule "include/tg_api"]
+	path = include/tg_api
+	url = https://github.com/TelegramBot/Api.git

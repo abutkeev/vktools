@@ -2,10 +2,12 @@
 require_once('vkApi.php');
 require_once('Logger.php');
 require_once('Config.php');
+include_once('tg_api.php');
 
 class vkTools {
   private $api;
   private $db;
+  private $tg_api;
 
   function __construct() {
     $this->api = new vkApi(Config::TOKEN);
@@ -15,6 +17,8 @@ class vkTools {
     $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
     Logger::init('vkTools', LOG_PERROR);
+
+    $this->tg_api = new TelegramBot\Api\BotApi(Config::TG_TOKEN);
   }
 
   public function merge_sessions($diff = 14*60) {
