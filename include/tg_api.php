@@ -6,4 +6,6 @@ function __autoload($class_name) {
     include($file);
   }
 }
+include_once(__DIR__.'/tg_api/src/Types/Update.php');
+include_once(__DIR__.'/tg_api/src/BaseType.php');
 ?>

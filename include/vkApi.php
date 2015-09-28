@@ -43,6 +43,9 @@ class vkApi {
     if (!is_array($result->{'response'}))
       throw new Exception('Response is not array');
 
+    if (count($result->{'response'}) == 0 )
+      throw new Exception('User not found', 404);
+
     if (count($result->{'response'}) != 1 )
       throw new Exception('Response have '. count($result->{'response'}). ' items');
 

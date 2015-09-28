@@ -2,15 +2,14 @@
 require_once('vkApi.php');
 require_once('Logger.php');
 require_once('Config.php');
-include_once('tg_api.php');
+include_once('tgTools.php');
 
-class vkTools {
-  private $api;
+class vkTools extends vkApi{
   private $db;
-  private $tg_api;
+  private $tg;
 
   function __construct() {
-    $this->api = new vkApi(Config::TOKEN);
+    parent::__construct(Config::TOKEN);
 
     $dboptions = array(PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8');
     $this->db  = new PDO('mysql:dbname='. Config::DB_NAME. ';host='. Config::DB_HOST, Config::DB_LOGIN, Config::DB_PASSWORD, $dboptions);
@@ -18,7 +17,7 @@ class vkTools {
 
     Logger::init('vkTools', LOG_PERROR);
 
-    $this->tg_api = new TelegramBot\Api\BotApi(Config::TG_TOKEN);
+    $this->tg = new tgTools();
   }
 
   public function merge_sessions($diff = 14*60) {
@@ -65,8 +64,8 @@ class vkTools {
     $sth->execute(array('user_id' => $user_id));
     $db_info = $sth->fetch(PDO::FETCH_ASSOC);
 
-    $info = $this->api->get_online($user_id);
-    if ($info['online'] && $this->api->get_time() - $info['last_seen'] > $online_timeout)
+    $info = $this->get_online($user_id);
+    if ($info['online'] && $this->get_time() - $info['last_seen'] > $online_timeout)
       $info['online'] = 0;
 
     Logger::log(LOG_DEBUG, var_export($info, true));
@@ -100,8 +99,26 @@ class vkTools {
 
       $sth = $this->db->prepare('INSERT INTO online (user_id, since, till, platform, mobile, app, current) VALUES (:user_id, :since, :till, :platform, :mobile, :app, :current)');
       $sth->execute($info);
+      $session_id = $this->db->lastInsertId();
+      $this->db->commit();
+      $this->tg->notify($session_id);
     }
-    $this->db->commit();
+  }
+
+  public function get_user_name($info) {
+    if (property_exists($info, 'first_name') && property_exists($info, 'last_name')) {
+      return $info->{'first_name'}. ' '. $info->{'last_name'};
+    } else {
+      throw new Exception('first_name or last_name is not defined');
+    }
+  }
+
+  public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile')) {
+    $user = parent::get_user($id, $fields, 'nom');
+    $this->db->prepare('REPLACE INTO users (id, first_name, last_name) VALUES (:id, :first_name, :last_name)')
+      ->execute(array('id' => $user->{'id'}, 'first_name' => $user->{'first_name'}, 'last_name' =>$user->{'last_name'}));
+
+    return $user;
   }
 }
 ?>
