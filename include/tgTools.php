@@ -65,7 +65,6 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function notify($session_id) {
-    Logger::$debug = true;
     Logger::log(LOG_DEBUG, "notify for session $session_id started");
     $sth = $this->db->prepare('SELECT user_id, platform, mobile, app FROM online WHERE id = :id');
     $sth->execute(array('id' => $session_id));
@@ -75,10 +74,9 @@ class tgTools extends TelegramBot\Api\BotApi{
     $sth->execute(array('vk_user_id' => $session['user_id']));
 
     while ($tg_user = $sth->fetch(PDO::FETCH_ASSOC)) {
-      parent::sendMessage($tg_user['tg_user_id'], 'Пользователь '. $this->get_vk_user_name($session['user_id']). ' оплайн'. $this->get_session_platform_name($session), 'Markdown', true);
+      parent::sendMessage($tg_user['tg_user_id'], $this->get_vk_user_name($session['user_id']). ' оплайн'. $this->get_session_platform_name($session), 'Markdown', true);
     }
     Logger::log(LOG_DEBUG, 'notify finished');
-    Logger::$debug = false;
   }
 
   public function get_vk_user_name($id) {
@@ -87,7 +85,7 @@ class tgTools extends TelegramBot\Api\BotApi{
     if ($user = $sth->fetch(PDO::FETCH_ASSOC)) {
       return '['. $user['first_name']. ' '. $user['last_name']. '](https://vk.com/id'. $id. ')';
     } else {
-      return '['. $id. '](https://vk.com/id'. $id. ')';
+      return '[Пользователь'. $id. '](https://vk.com/id'. $id. ')';
     }
   }
 
