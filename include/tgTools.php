@@ -6,6 +6,7 @@ include_once('tg_api.php');
 
 use TelegramBot\Api\Types\User;
 use TelegramBot\Api\Types\Update;
+use TelegramBot\Api\Types\ForceReply;
 
 class tgTools extends TelegramBot\Api\BotApi{
   private $db;
@@ -30,15 +31,19 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function sendMessage($text, $parse_mode = null, $disablePreview = false) {
-    parent::sendMessage($this->user_id, $text, $parse_mode, $disablePreview);
+    return parent::sendMessage($this->user_id, $text, $parse_mode, $disablePreview);
+  }
+
+  public function sendFormattedMessage($text, $replyMarkup = null, $replyToMessageId = null) {
+    return parent::sendMessage($this->user_id, $text, 'Markdown', true, $replyToMessageId, $replyMarkup);
   }
 
   public function sendSuccessMessage() {
-    $this->sendMessage('Команда выполнена успешно');
+    return $this->sendMessage('Всё получилось!');
   }
 
   public function sendFailMessage() {
-    $this->sendMessage('При выполнении команды произошла ошибка');
+    return $this->sendMessage('Прости, но при выполнении команды произошла ошибка :(');
   }
 
   public function watch($user_id) {
@@ -126,7 +131,7 @@ class tgTools extends TelegramBot\Api\BotApi{
   public function getCommand(&$text) {
     if ($text[0] == '/') {
       $tmp = explode(' ', $text);
-      $command = array_shift($tmp);
+      $command = substr(array_shift($tmp), 1);
       $text = implode(' ', $tmp);
       return $command;
     }
@@ -135,6 +140,13 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function processMessage(vkTools $vk_tools, $command, $text, $message) {
+    if ($reply = $message->getReplyToMessage()) {
+      $reply_id = $reply->getMessageId();
+      Logger::log(LOG_DEBUG, "reply id $reply_id");
+      if ($this->handleSession($vk_tools, $reply_id, $command, $text))
+        return;
+    }
+
     if (isset($command)) {
       $this->execute($vk_tools, $command, $text);
     } else {
@@ -149,30 +161,63 @@ class tgTools extends TelegramBot\Api\BotApi{
         $user = $vk_tools->get_user($text, array());
         Logger::log(LOG_DEBUG, 'got user with id '. $user->{'id'});
         if ($this->watch($user->{'id'})) {
-          $this->sendMessage('Пользователь ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') добавлен в список наблюдения.', 'Markdown', true);
+          $this->sendFormattedMessage('['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') добавлен в список наблюдения.');
         } else {
-          $this->sendMessage('Пользователь ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже есть в списке наблюдения.', 'Markdown', true);
+          $this->sendFormattedMessage('['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже есть в списке наблюдения.');
         }
       } catch (Exception $e) {
         if ($e->getCode() == 404) {
-          $this->sendMessage('Пользователь не найден :(');
+          $this->sendMessage('Не могу найти такого пользователя :(');
         } else {
           $this->sendFailMessage();
           Logger::log(LOG_ERR, $e->getMessage());
         } 
       }
     } else {
-      $this->sendFailMessage();
+      $message = $this->sendFormattedMessage("Хорошо, давай добавим человека в список наблюдения. Для этого пришли мне его или её *id*, *поддомен* или *ссылку* на его страницу.\n\n".
+          "Например, если хочешь добавить в список Павла Дурова, прошли мне _1_, _durov_ или _https://vk.com/durov_.", new ForceReply());
+      $message_id = $message->getMessageId();
+      Logger::log(LOG_DEBUG, 'message id: '. $message_id);
+      $this->registerSession($message_id, 'watch');
     }
+  }
+
+  public function registerSession($message_id, $type) {
+    $this->db->prepare('INSERT INTO requests (message_id, type) VALUES (:message_id, :type)')->execute(array('message_id' => $message_id, 'type' => $type));
+  }
+
+  public function handleSession($vk_tools, $message_id,  $command, $text) {
+    $sth = $this->db->prepare('SELECT type FROM requests WHERE message_id = :message_id');
+    $sth->execute(array('message_id' => $message_id));
+
+    if ($info = $sth->fetch(PDO::FETCH_ASSOC)) {
+      $this->db->prepare('DELETE FROM requests WHERE message_id = :message_id')->execute(array('message_id' => $message_id));
+      switch ($info['type']) {
+        case 'watch':
+          if (!isset($command)) {
+            $this->executeWatch($vk_tools, $text);
+            return true;
+          }
+          break;
+        case 'notify':
+          if (!isset($command))
+            $this->executeNotify($vk_tools, $text);
+          else
+            $this->executeNotify($vk_tools, $command);
+          return true;
+      }
+    }
+
+    return false;
   }
 
   public function executeNotify($vk_tools, $text){
     try {
       $user = $vk_tools->get_user($text, array());
       if ($this->addNotify($user->{'id'})) {
-        $this->sendMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') включены.', 'Markdown', true);
+        $this->sendFormattedMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') включены.');
       } else {
-        $this->sendMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже были включены.', 'Markdown', true);
+        $this->sendFormattedMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже были включены.');
       }
     } catch (Exception $e) {
       if ($e->getCode() == 4404) {
@@ -188,10 +233,10 @@ class tgTools extends TelegramBot\Api\BotApi{
 
   public function execute($vk_tools, $command, $text) {
     switch ($command) {
-      case '/watch':
+      case 'watch':
         $this->executeWatch($vk_tools, $text);
         break;
-      case '/notify':
+      case 'notify':
         $this->executeNotify($vk_tools, $text);
         break;
       default:
