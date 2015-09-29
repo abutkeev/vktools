@@ -27,9 +27,9 @@ class vkTools extends vkApi{
     $sth_key = $this->db->query('SELECT user_id, platform, mobile, app FROM online GROUP BY user_id, platform, mobile, app');
 
     $sth_null = $this->db->prepare(
-        'SELECT id, since, till, platform, mobile, app FROM online WHERE UNIX_TIMESTAMP() - since < :max_age AND user_id = :user_id AND platform = :platform AND mobile = :mobile AND app is NULL FOR UPDATE');
+        'SELECT id, since, till, platform, mobile, app FROM online WHERE UNIX_TIMESTAMP() - till < :max_age AND user_id = :user_id AND platform = :platform AND mobile = :mobile AND app is NULL FOR UPDATE');
     $sth_not_null = $this->db->prepare(
-        'SELECT id, since, till, platform, mobile, app FROM online WHERE UNIX_TIMESTAMP() - since < :max_age AND user_id = :user_id AND platform = :platform AND mobile = :mobile AND app = :app FOR UPDATE');
+        'SELECT id, since, till, platform, mobile, app FROM online WHERE UNIX_TIMESTAMP() - till < :max_age AND user_id = :user_id AND platform = :platform AND mobile = :mobile AND app = :app FOR UPDATE');
 
     while ($key = $sth_key->fetch(PDO::FETCH_ASSOC)) {
 
