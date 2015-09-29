@@ -25,7 +25,12 @@ class vkApi {
     }
     $url = 'https://api.vk.com/method/'. $method. '?'. implode('&', $params);
     Logger::log(LOG_DEBUG, "url: $url");
-    $result = json_decode(file_get_contents($url));
+    if (! $data = file_get_contents($url) ) 
+      throw new Exception('file_get_contents returns no data');
+
+    if (! $result = json_decode($data) )
+      throw new Exception("can't decode data");
+
     return $result;
   }
 
