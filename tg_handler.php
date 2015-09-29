@@ -22,7 +22,6 @@ try {
 
   $tg_tools->processMessage($vk_tools, $command, $text, $message);
 
-
   Logger::log(LOG_DEBUG, 'finished');
 } catch (\TelegramBot\Api\Exception $e) {
   Logger::log(LOG_ERR, $e->getMessage());
