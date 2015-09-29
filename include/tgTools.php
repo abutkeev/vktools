@@ -1,6 +1,7 @@
 <?php
 require_once('Logger.php');
 require_once('Config.php');
+require_once('vkTools.php');
 include_once('tg_api.php');
 
 use TelegramBot\Api\Types\User;
@@ -120,6 +121,83 @@ class tgTools extends TelegramBot\Api\BotApi{
 
   public function parseMessage($raw_post_data) {
     return Update::fromResponse(self::jsonValidate($raw_post_data, true))->getMessage();
+  }
+
+  public function getCommand(&$text) {
+    if ($text[0] == '/') {
+      $tmp = explode(' ', $text);
+      $command = array_shift($tmp);
+      $text = implode(' ', $tmp);
+      return $command;
+    }
+
+    return NULL;
+  }
+
+  public function processMessage(vkTools $vk_tools, $command, $text, $message) {
+    if (isset($command)) {
+      $this->execute($vk_tools, $command, $text);
+    } else {
+      $this->sendFailMessage();
+    }
+  }
+
+  public function executeWatch($vk_tools, $text) {
+    Logger::log(LOG_DEBUG, "executing watch, text = $text");
+    if (isset($text) && $text != '') {
+      try {
+        $user = $vk_tools->get_user($text, array());
+        Logger::log(LOG_DEBUG, 'got user with id '. $user->{'id'});
+        if ($this->watch($user->{'id'})) {
+          $this->sendMessage('Пользователь ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') добавлен в список наблюдения.', 'Markdown', true);
+        } else {
+          $this->sendMessage('Пользователь ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже есть в списке наблюдения.', 'Markdown', true);
+        }
+      } catch (Exception $e) {
+        if ($e->getCode() == 404) {
+          $this->sendMessage('Пользователь не найден :(');
+        } else {
+          $this->sendFailMessage();
+          Logger::log(LOG_ERR, $e->getMessage());
+        } 
+      }
+    } else {
+      $this->sendFailMessage();
+    }
+  }
+
+  public function executeNotify($vk_tools, $text){
+    try {
+      $user = $vk_tools->get_user($text, array());
+      if ($this->addNotify($user->{'id'})) {
+        $this->sendMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') включены.', 'Markdown', true);
+      } else {
+        $this->sendMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже были включены.', 'Markdown', true);
+      }
+    } catch (Exception $e) {
+      if ($e->getCode() == 4404) {
+        $this->sendMessage('Пользователь не в списке наблюдения');
+      } elseif ($e->getCode() == 404) {
+        $this->sendMessage('Пользователь не найден');
+      } else {
+        $this->sendFailMessage();
+        Logger::log(LOG_ERR, $e->getMessage());
+      } 
+    }
+  }
+
+  public function execute($vk_tools, $command, $text) {
+    switch ($command) {
+      case '/watch':
+        $this->executeWatch($vk_tools, $text);
+        break;
+      case '/notify':
+        $this->executeNotify($vk_tools, $text);
+        break;
+      default:
+        $this->sendFailMessage();
+        break;
+    }
   }
 
 }
