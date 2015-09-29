@@ -4,6 +4,7 @@ require_once('Config.php');
 include_once('tg_api.php');
 
 use TelegramBot\Api\Types\User;
+use TelegramBot\Api\Types\Update;
 
 class tgTools extends TelegramBot\Api\BotApi{
   private $db;
@@ -74,7 +75,7 @@ class tgTools extends TelegramBot\Api\BotApi{
     $sth->execute(array('vk_user_id' => $session['user_id']));
 
     while ($tg_user = $sth->fetch(PDO::FETCH_ASSOC)) {
-      parent::sendMessage($tg_user['tg_user_id'], $this->get_vk_user_name($session['user_id']). ' оплайн'. $this->get_session_platform_name($session), 'Markdown', true);
+      parent::sendMessage($tg_user['tg_user_id'], $this->get_vk_user_name($session['user_id']). ' онлайн'. $this->get_session_platform_name($session), 'Markdown', true);
     }
     Logger::log(LOG_DEBUG, 'notify finished');
   }
@@ -115,6 +116,10 @@ class tgTools extends TelegramBot\Api\BotApi{
         }
     }
     return " (platform: {$session['platform']}, mobile: {$session['mobile']}, app: {$session['app']})";
+  }
+
+  public function parseMessage($raw_post_data) {
+    return Update::fromResponse(self::jsonValidate($raw_post_data, true))->getMessage();
   }
 
 }

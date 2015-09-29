@@ -2,16 +2,14 @@
 require_once('include/vkTools.php');
 require_once('include/tgTools.php');
 
-use TelegramBot\Api\Types\Update;
-
 Logger::init('tg_handler', 0);
-Logger::$debug = true;
+Logger::debug(true);
 try {
   Logger::log(LOG_DEBUG, 'starting');
   $tg_tools = new tgTools();
   $vk_tools = new vkTools();
 
-  $message = Update::fromResponse(TelegramBot\Api\BotApi::jsonValidate($HTTP_RAW_POST_DATA, true))->getMessage();
+  $message = $tg_tools->parseMessage($HTTP_RAW_POST_DATA);
   
   $tg_tools->saveUser($message->getFrom());
 
