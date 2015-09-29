@@ -20,25 +20,25 @@ class vkTools extends vkApi{
     $this->tg = new tgTools();
   }
 
-  public function merge_sessions($diff = 14*60) {
+  public function merge_sessions($diff = 14*60, $max_age=3600) {
 #    Logger::$debug = true;
     $this->db->beginTransaction();
 
     $sth_key = $this->db->query('SELECT user_id, platform, mobile, app FROM online GROUP BY user_id, platform, mobile, app');
 
     $sth_null = $this->db->prepare(
-        'SELECT id, since, till, platform, mobile, app FROM online WHERE user_id = :user_id AND platform = :platform AND mobile = :mobile AND app is NULL FOR UPDATE');
+        'SELECT id, since, till, platform, mobile, app FROM online WHERE UNIX_TIMESTAMP() - since < :max_age AND user_id = :user_id AND platform = :platform AND mobile = :mobile AND app is NULL FOR UPDATE');
     $sth_not_null = $this->db->prepare(
-        'SELECT id, since, till, platform, mobile, app FROM online WHERE user_id = :user_id AND platform = :platform AND mobile = :mobile AND app = :app FOR UPDATE');
+        'SELECT id, since, till, platform, mobile, app FROM online WHERE UNIX_TIMESTAMP() - since < :max_age AND user_id = :user_id AND platform = :platform AND mobile = :mobile AND app = :app FOR UPDATE');
 
     while ($key = $sth_key->fetch(PDO::FETCH_ASSOC)) {
 
       if (isset($key['app'])) {
         $sth = $sth_not_null;
-        $sth->execute(array('user_id' => $key['user_id'], 'platform' => $key['platform'], 'mobile' => $key['mobile'], 'app' => $key['app']));
+        $sth->execute(array('user_id' => $key['user_id'], 'platform' => $key['platform'], 'mobile' => $key['mobile'], 'app' => $key['app'], 'max_age' => $max_age));
       } else {
         $sth = $sth_null;
-        $sth->execute(array('user_id' => $key['user_id'], 'platform' => $key['platform'], 'mobile' => $key['mobile']));
+        $sth->execute(array('user_id' => $key['user_id'], 'platform' => $key['platform'], 'mobile' => $key['mobile'], 'max_age' => $max_age));
       }
 
       $update_sth = $this->db->prepare('UPDATE online SET since = :since WHERE id = :id');
