@@ -58,6 +58,17 @@ class vkTools extends vkApi{
     $this->db->commit();
   }
 
+  public function save_all_online($online_timeout = 15*60) {
+#    Logger::temporary_debug_on();
+    $sth = $this->db->query('SELECT vk_user_id FROM watch GROUP BY vk_user_id');
+    while ($user = $sth->fetch(PDO::FETCH_ASSOC)) {
+      $user_id = $user['vk_user_id'];
+      Logger::log(LOG_DEBUG, "save online for $user_id");
+      $this->save_online($user_id);
+    }
+    Logger::temporary_debug_off();
+  }
+
   public function save_online($user_id, $online_timeout = 15*60) {
     $this->db->beginTransaction();
     $sth = $this->db->prepare('SELECT id, since, till, platform, mobile, app FROM online WHERE user_id = :user_id AND current = 1 FOR UPDATE');
