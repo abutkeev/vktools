@@ -174,8 +174,8 @@ class tgTools extends TelegramBot\Api\BotApi{
         } 
       }
     } else {
-      $message = $this->sendFormattedMessage("Хорошо, давай добавим человека в список наблюдения. Для этого пришли мне его или её *id*, *поддомен* или *ссылку* на его страницу.\n\n".
-          "Например, если хочешь добавить в список Павла Дурова, прошли мне _1_, _durov_ или _https://vk.com/durov_.", new ForceReply());
+      $message = $this->sendFormattedMessage("Хорошо, давай добавим человека в список наблюдения. Для этого пришли мне его или её _id_, _поддомен_ или _ссылку_ на его или её страницу.\n\n".
+          "Например, если хочешь добавить в список Павла Дурова, прошли мне *1*, *durov* или *https://vk.com/durov*.", new ForceReply());
       $message_id = $message->getMessageId();
       Logger::log(LOG_DEBUG, 'message id: '. $message_id);
       $this->registerSession($message_id, 'watch');
