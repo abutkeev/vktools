@@ -1,7 +1,7 @@
 <?php
   final class Logger {
     static private $instance;
-    static public $debug = false;
+    static private $debug = false;
 
     static private $old_debug = false;
 
@@ -21,6 +21,11 @@
         new self();
       if ($priority == LOG_DEBUG && self::$debug)
         syslog($priority, $message);
+    }
+
+    static function debug($state) {
+      self::$debug = $state;
+      self::$old_debug = $state;
     }
 
     static function temporary_debug_on() {
