@@ -31,11 +31,15 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function sendMessage($text, $parse_mode = null, $disablePreview = false) {
-    return parent::sendMessage($this->user_id, $text, $parse_mode, $disablePreview);
+    $message = parent::sendMessage($this->user_id, $text, $parse_mode, $disablePreview);
+    $this->saveLastMessageId($message->getMessageId());
+    return $message;
   }
 
   public function sendFormattedMessage($text, $replyMarkup = null, $replyToMessageId = null) {
-    return parent::sendMessage($this->user_id, $text, 'Markdown', true, $replyToMessageId, $replyMarkup);
+    $message = parent::sendMessage($this->user_id, $text, 'Markdown', true, $replyToMessageId, $replyMarkup);
+    $this->saveLastMessageId($message->getMessageId());
+    return $message;
   }
 
   public function sendSuccessMessage() {
@@ -44,6 +48,10 @@ class tgTools extends TelegramBot\Api\BotApi{
 
   public function sendFailMessage() {
     return $this->sendMessage('Прости, но при выполнении команды произошла ошибка :(');
+  }
+
+  public function sendUnknownCommandMessage() {
+    return $this->sendMessage('Прости, но я не знаю что тебе на это ответить. Если хочешь узнать что я умею делать, напиши мне /help...');
   }
 
   public function watch($user_id) {
@@ -139,18 +147,27 @@ class tgTools extends TelegramBot\Api\BotApi{
     return NULL;
   }
 
-  public function processMessage(vkTools $vk_tools, $command, $text, $message) {
+  public function saveLastMessageId($message_id) {
+    $this->db->prepare('REPLACE INTO last_message (tg_user_id, message_id) VALUES (:tg_user_id, :message_id)')->execute(array('tg_user_id' => $this->user_id, 'message_id' => $message_id));
+  }
+
+  public function getReplyId($message) {
     if ($reply = $message->getReplyToMessage()) {
       $reply_id = $reply->getMessageId();
       Logger::log(LOG_DEBUG, "reply id $reply_id");
-      if ($this->handleSession($vk_tools, $reply_id, $command, $text))
-        return;
+
+      return $reply_id;
     }
+  }
+
+  public function processMessage(vkTools $vk_tools, $command, $text, $message) {
+    if ($this->handleSession($vk_tools, $this->getReplyId($message), $command, $text))
+      return;
 
     if (isset($command)) {
       $this->execute($vk_tools, $command, $text);
     } else {
-      $this->sendFailMessage();
+      $this->sendUnknownCommandMessage();
     }
   }
 
@@ -187,6 +204,18 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function handleSession($vk_tools, $message_id,  $command, $text) {
+    if (!isset($message_id)) {
+      $sth = $this->db->prepare('SELECT message_id FROM last_message WHERE tg_user_id = :tg_user_id');
+      $sth->execute(array('tg_user_id' => $this->user_id));
+
+      if ($info = $sth->fetch(PDO::FETCH_ASSOC)) {
+        $message_id = $info['message_id'];
+        Logger::log(LOG_DEBUG, "last_message_id: $message_id");
+      } else {
+        return false;
+      }
+    }
+
     $sth = $this->db->prepare('SELECT type FROM requests WHERE message_id = :message_id');
     $sth->execute(array('message_id' => $message_id));
 
@@ -240,7 +269,7 @@ class tgTools extends TelegramBot\Api\BotApi{
         $this->executeNotify($vk_tools, $text);
         break;
       default:
-        $this->sendFailMessage();
+        $this->sendUnknownCommandMessage();
         break;
     }
   }
