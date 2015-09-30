@@ -195,7 +195,7 @@ class tgTools extends TelegramBot\Api\BotApi{
       }
     } else {
       $message = $this->sendFormattedMessage("Хорошо, давай добавим человека в список наблюдения. Для этого пришли мне его или её _id_, _поддомен_ или _ссылку_ на его или её страницу.\n\n".
-          "Например, если хочешь добавить в список Павла Дурова, прошли мне *1*, *durov* или *https://vk.com/durov*.", new ForceReply());
+          "Например, если хочешь добавить в список Павла Дурова, прошли мне *1*, *durov* или *https://vk.com/durov*.\n\nЕсли ты передумал и не хочешь никого добавлять, пришли мне в ответ /0.", new ForceReply());
       $message_id = $message->getMessageId();
       Logger::log(LOG_DEBUG, 'message id: '. $message_id);
       $this->registerSession($message_id, 'watch');
@@ -227,7 +227,11 @@ class tgTools extends TelegramBot\Api\BotApi{
       switch ($info['type']) {
         case 'watch':
           if (!isset($command)) {
-            $this->executeWatch($vk_tools, $text);
+            if ($command != '0')
+              $this->executeWatch($vk_tools, $text);
+            return true;
+          } elseif ($command == 0) {
+            $this->sendFormattedMessage('Ладно', new ReplyKeyboardHide());
             return true;
           }
           break;
@@ -237,7 +241,7 @@ class tgTools extends TelegramBot\Api\BotApi{
           elseif ($command != '0')
             $this->executeNotify($vk_tools, $command);
           else 
-            $this->sendFormattedMessage('Хорошо', new ReplyKeyboardHide());
+            $this->sendFormattedMessage('Ладно', new ReplyKeyboardHide());
           return true;
       }
     }
@@ -277,7 +281,7 @@ class tgTools extends TelegramBot\Api\BotApi{
         $users_list = '';
         $keyboard = $this->generateUsersKeyboard($users, $users_list);
         $message = $this->sendFormattedMessage("Хорошо, давай я буду писать тебе когда нужный тебе человек будут онлайн.\n\nВот люди из твоего списка наблюдения, о которых я тебе ещё не пишу:\n". $users_list.
-            "Если ты хочешь чтобы я тебе писал о новом человеке, пришли мне _id_, _поддомен_ или _ссылку_ на его или её страницу.\n",
+            "\nЕсли ты передумал и не хочешь никого добавлять, пришли в ответ /0.\nЕсли ты хочешь чтобы я тебе писал о новом человеке, пришли в ответ _id_, _поддомен_ или _ссылку_ на его или её страницу.\n",
             new ReplyKeyboardMarkup($keyboard, true, true));
       }
 
@@ -290,12 +294,11 @@ class tgTools extends TelegramBot\Api\BotApi{
   public function generateUsersKeyboard(array $users, &$users_list) {
         $keyboard = array();
         foreach ($users as $user) {
-          $str = '/'. $user['id']. ' '. $user['first_name']. ' '. $user['last_name'];
-          $users_list .= $str. "\n";
-          array_push($keyboard, array($str));
+          $users_list = '/'. $user['id']. "\t[". $user['first_name']. ' '. $user['last_name']. '](https://vk.com/'. $user['id']. ")\n";
+          array_push($keyboard, array('/'. $user['id']. ' '. $user['first_name']. ' '. $user['last_name']));
         }
         $str = '/0 Не хочу никого добавлять';
-        $users_list .= $str. "\n";
+#        $users_list .= $str. "\n";
         array_push($keyboard, array($str));
         return $keyboard;
   }
