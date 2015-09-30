@@ -263,7 +263,7 @@ class tgTools extends TelegramBot\Api\BotApi{
           $this->executeWatch($vk_tools, $text);
           $this->executeNotify($vk_tools, $text);
         } elseif ($e->getCode() == 404) {
-          $this->sendMessage('Пользователь не найден');
+          $this->sendMessage('Не могу найти такого пользователя :(');
         } else {
           $this->sendFailMessage();
           Logger::log(LOG_ERR, $e->getMessage());
