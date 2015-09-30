@@ -81,6 +81,19 @@ class tgTools extends TelegramBot\Api\BotApi{
     return true;
   }
 
+  public function delNotify($user_id) {
+    $sth = $this->db->prepare('DELETE FROM notify WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
+    $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    return $sth->rowCount();
+  }
+
+  public function forget($user_id) {
+    $this->db->prepare('DELETE FROM notify WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    $sth = $this->db->prepare('DELETE FROM watch WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
+    $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    return $sth->rowCount();
+  }
+
   public function notify($session_id) {
     Logger::log(LOG_DEBUG, "notify for session $session_id started");
     $sth = $this->db->prepare('SELECT user_id, platform, mobile, app FROM online WHERE id = :id');
@@ -243,6 +256,22 @@ class tgTools extends TelegramBot\Api\BotApi{
           else 
             $this->sendFormattedMessage('Ладно', new ReplyKeyboardHide());
           return true;
+        case 'mute':
+          if (!isset($command))
+            $this->executeMute($vk_tools, $text);
+          elseif ($command != '0')
+            $this->executeMute($vk_tools, $command);
+          else 
+            $this->sendFormattedMessage('Ладно', new ReplyKeyboardHide());
+          return true;
+        case 'forget':
+          if (!isset($command))
+            $this->executeForget($vk_tools, $text);
+          elseif ($command != '0')
+            $this->executeForget($vk_tools, $command);
+          else 
+            $this->sendFormattedMessage('Ладно', new ReplyKeyboardHide());
+          return true;
       }
     }
 
@@ -280,6 +309,7 @@ class tgTools extends TelegramBot\Api\BotApi{
       } else {
         $users_list = '';
         $keyboard = $this->generateUsersKeyboard($users, $users_list);
+        array_push($keyboard, array('/0 Не хочу никого добавлять'));
         $message = $this->sendFormattedMessage("Хорошо, давай я буду писать тебе когда нужный тебе человек будут онлайн.\n\nВот люди из твоего списка наблюдения, о которых я тебе ещё не пишу:\n". $users_list.
             "\nЕсли ты передумал и не хочешь никого добавлять, пришли в ответ /0.\nЕсли ты хочешь чтобы я тебе писал о новом человеке, пришли в ответ _id_, _поддомен_ или _ссылку_ на его или её страницу.\n",
             new ReplyKeyboardMarkup($keyboard, true, true));
@@ -291,15 +321,88 @@ class tgTools extends TelegramBot\Api\BotApi{
     }
   }
 
+  public function executeMute($vk_tools, $text) {
+    if (isset($text) && $text != '') {
+      try {
+        $user = $vk_tools->get_user($text, array());
+        if ($this->delNotify($user->{'id'})) {
+          $this->sendFormattedMessage('Теперь не буду писать тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн.', new ReplyKeyboardHide());
+        } else {
+          $this->sendFormattedMessage('Я же не писал тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн! Ну и сейчас не буду :)', new ReplyKeyboardHide());
+        }
+      } catch (Exception $e) {
+        if ($e->getCode() == 404) {
+          $this->sendMessage('Не могу найти такого пользователя :(');
+        } else {
+          $this->sendFailMessage();
+          Logger::log(LOG_ERR, $e->getMessage());
+        } 
+      }
+    } else {
+      $sth = $this->db->prepare('SELECT id, first_name, last_name FROM notify JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id');
+      $sth->execute(array('tg_user_id' => $this->user_id));
+      $users = $sth->fetchAll();
+      if (empty($users)) {
+        $message = $this->sendMessage("Сейчас я и так тебе ни о ком не пишу...", new ReplyKeyboardHide());
+      } else {
+        $users_list = '';
+        $keyboard = $this->generateUsersKeyboard($users, $users_list);
+        array_push($keyboard, array('/0 Я передумал!'));
+        $message = $this->sendFormattedMessage("Хочешь чтоб я перестал тебе писать тебе когда кто-то онлайн?\n\nВот люди, о которых я тебе не пишу:\n". $users_list.
+            "\nО ком перестать писать?\n\nЕсли ты передумал, пришли в ответ /0.",
+            new ReplyKeyboardMarkup($keyboard, true, true));
+      }
+
+      $message_id = $message->getMessageId();
+      Logger::log(LOG_DEBUG, 'message id: '. $message_id);
+      $this->registerSession($message_id, 'mute');
+    }
+  }
+
+  public function executeForget($vk_tools, $text) {
+    if (isset($text) && $text != '') {
+      try {
+        $user = $vk_tools->get_user($text, array());
+        if ($this->forget($user->{'id'})) {
+          $this->sendFormattedMessage('Хорошо, я удалил ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') из списка наблюдения.', new ReplyKeyboardHide());
+        } else {
+          $this->sendFormattedMessage('['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') нет в списке наблюдения. Ну и сейчас не будет :)', new ReplyKeyboardHide());
+        }
+      } catch (Exception $e) {
+        if ($e->getCode() == 404) {
+          $this->sendMessage('Не могу найти такого пользователя :(');
+        } else {
+          $this->sendFailMessage();
+          Logger::log(LOG_ERR, $e->getMessage());
+        } 
+      }
+    } else {
+      $sth = $this->db->prepare('SELECT id, first_name, last_name FROM watch JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id');
+      $sth->execute(array('tg_user_id' => $this->user_id));
+      $users = $sth->fetchAll();
+      if (empty($users)) {
+        $message = $this->sendMessage("В списке неблюдения пусто...", new ReplyKeyboardHide());
+      } else {
+        $users_list = '';
+        $keyboard = $this->generateUsersKeyboard($users, $users_list);
+        array_push($keyboard, array('/0 Я передумал!'));
+        $message = $this->sendFormattedMessage("Хочешь удалить кого-то из списка наблюдения?\n\nВот люди, о которых нам сейчас:\n". $users_list.
+            "\nКого удалить?\n\nЕсли ты передумал, пришли в ответ /0.",
+            new ReplyKeyboardMarkup($keyboard, true, true));
+      }
+
+      $message_id = $message->getMessageId();
+      Logger::log(LOG_DEBUG, 'message id: '. $message_id);
+      $this->registerSession($message_id, 'forget');
+    }
+  }
   public function generateUsersKeyboard(array $users, &$users_list) {
         $keyboard = array();
         foreach ($users as $user) {
-          $users_list = '/'. $user['id']. "\t[". $user['first_name']. ' '. $user['last_name']. '](https://vk.com/'. $user['id']. ")\n";
+          $users_list .= '/'. $user['id']. "\t[". $user['first_name']. ' '. $user['last_name']. '](https://vk.com/'. $user['id']. ")\n";
           array_push($keyboard, array('/'. $user['id']. ' '. $user['first_name']. ' '. $user['last_name']));
         }
-        $str = '/0 Не хочу никого добавлять';
-#        $users_list .= $str. "\n";
-        array_push($keyboard, array($str));
+
         return $keyboard;
   }
 
@@ -310,6 +413,12 @@ class tgTools extends TelegramBot\Api\BotApi{
         break;
       case 'notify':
         $this->executeNotify($vk_tools, $text);
+        break;
+      case 'mute':
+        $this->executeMute($vk_tools, $text);
+        break;
+      case 'forget':
+        $this->executeForget($vk_tools, $text);
         break;
       case 'help':
         $this->sendHelp();
