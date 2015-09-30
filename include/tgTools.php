@@ -249,7 +249,7 @@ class tgTools extends TelegramBot\Api\BotApi{
     return false;
   }
 
-  public function executeNotify($vk_tools, $text){
+  public function executeNotify($vk_tools, $text) {
     if (isset($text) && $text != '') {
       try {
         $user = $vk_tools->get_user($text, array());
