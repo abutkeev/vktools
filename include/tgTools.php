@@ -7,6 +7,8 @@ include_once('tg_api.php');
 use TelegramBot\Api\Types\User;
 use TelegramBot\Api\Types\Update;
 use TelegramBot\Api\Types\ForceReply;
+use TelegramBot\Api\Types\ReplyKeyboardMarkup;
+use TelegramBot\Api\Types\ReplyKeyboardHide;
 
 class tgTools extends TelegramBot\Api\BotApi{
   private $db;
@@ -161,6 +163,7 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function processMessage(vkTools $vk_tools, $command, $text, $message) {
+    $this->sendChatAction($this->user_id, 'typing');
     if ($this->handleSession($vk_tools, $this->getReplyId($message), $command, $text))
       return;
 
@@ -231,8 +234,10 @@ class tgTools extends TelegramBot\Api\BotApi{
         case 'notify':
           if (!isset($command))
             $this->executeNotify($vk_tools, $text);
-          else
+          elseif ($command != '0')
             $this->executeNotify($vk_tools, $command);
+          else 
+            $this->sendFormattedMessage('Хорошо', new ReplyKeyboardHide());
           return true;
       }
     }
@@ -241,23 +246,58 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   public function executeNotify($vk_tools, $text){
-    try {
-      $user = $vk_tools->get_user($text, array());
-      if ($this->addNotify($user->{'id'})) {
-        $this->sendFormattedMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') включены.');
-      } else {
-        $this->sendFormattedMessage('Уведомления для пользователя ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') уже были включены.');
+    if (isset($text) && $text != '') {
+      try {
+        $user = $vk_tools->get_user($text, array());
+        if ($this->addNotify($user->{'id'})) {
+          $this->sendFormattedMessage('Теперь я буду писать тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн.', new ReplyKeyboardHide());
+        } else {
+          $this->sendFormattedMessage('Я уже пишу тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появляется онлайн.', new ReplyKeyboardHide());
+        }
+      } catch (Exception $e) {
+        if ($e->getCode() == 4404) {
+          $this->executeWatch($vk_tools, $text);
+          $this->executeNotify($vk_tools, $text);
+        } elseif ($e->getCode() == 404) {
+          $this->sendMessage('Пользователь не найден');
+        } else {
+          $this->sendFailMessage();
+          Logger::log(LOG_ERR, $e->getMessage());
+        } 
       }
-    } catch (Exception $e) {
-      if ($e->getCode() == 4404) {
-        $this->sendMessage('Пользователь не в списке наблюдения');
-      } elseif ($e->getCode() == 404) {
-        $this->sendMessage('Пользователь не найден');
+    } else {
+      $sth = $this->db->prepare('SELECT id, first_name, last_name FROM watch JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id AND vk_user_id NOT IN (SELECT vk_user_id FROM notify WHERE tg_user_id = :tg_user_id)');
+      $sth->execute(array('tg_user_id' => $this->user_id));
+      $users = $sth->fetchAll();
+      if (empty($users)) {
+        $message = $this->sendFormattedMessage("Хорошо, давай добавим нового человека в список наблюдения и я буду писать тебе когда он или она будут онлайн.\n\n".
+            "Сейчас я уже пишу тебе о выходе в онлайн всех людей из твоего списка наблюдения, поэтому пришли мне _id_, _поддомен_ или _ссылку_ на страницу человека, которого ты хочешь добавить.\n",
+            new ForceReply());
       } else {
-        $this->sendFailMessage();
-        Logger::log(LOG_ERR, $e->getMessage());
-      } 
+        $users_list = '';
+        $keyboard = $this->generateUsersKeyboard($users, $users_list);
+        $message = $this->sendFormattedMessage("Хорошо, давай я буду писать тебе когда нужный тебе человек будут онлайн.\n\nВот люди из твоего списка наблюдения, о которых я тебе ещё не пишу:\n". $users_list.
+            "Если ты хочешь чтобы я тебе писал о новом человеке, пришли мне _id_, _поддомен_ или _ссылку_ на его или её страницу.\n",
+            new ReplyKeyboardMarkup($keyboard, true, true));
+      }
+
+      $message_id = $message->getMessageId();
+      Logger::log(LOG_DEBUG, 'message id: '. $message_id);
+      $this->registerSession($message_id, 'notify');
     }
+  }
+
+  public function generateUsersKeyboard(array $users, &$users_list) {
+        $keyboard = array();
+        foreach ($users as $user) {
+          $str = '/'. $user['id']. ' '. $user['first_name']. ' '. $user['last_name'];
+          $users_list .= $str. "\n";
+          array_push($keyboard, array($str));
+        }
+        $str = '/0 Не хочу никого добавлять';
+        $users_list .= $str. "\n";
+        array_push($keyboard, array($str));
+        return $keyboard;
   }
 
   public function execute($vk_tools, $command, $text) {
@@ -268,10 +308,17 @@ class tgTools extends TelegramBot\Api\BotApi{
       case 'notify':
         $this->executeNotify($vk_tools, $text);
         break;
+      case 'help':
+        $this->sendHelp();
+        break;
       default:
         $this->sendUnknownCommandMessage();
         break;
     }
+  }
+
+  public function sendHelp() {
+    $this->sendFormattedMessage('Я хотел бы рассказать про то, что я умею, но я сам пока об этом не знаю :(');
   }
 
 }
