@@ -233,6 +233,83 @@ class tgTools extends TelegramBot\Api\BotApi{
     }
   }
 
+  protected function execute_sessions($vk_tools, $text) {
+    return $this->sessions_action($vk_tools);
+  }
+
+  protected function sessions_action($vk_tools, $user_id = null, $count = 5) {
+    if ($user_id) {
+      $text = "Вот $count последних сессий для [". $vk_tools->get_user_name($session['user_id']). '](https://vk.com/id'. $user_id. "):\n\n";
+
+      $count = intval($count);
+      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE u.id = :user_id ORDER BY till DESC LIMIT $count");
+      $sth->execute(array('user_id' => $user_id));
+
+      $user = $vk_tools->get_user($user_id, array('sex'));
+      $was = 'Был';
+      if (property_exists($user, 'sex') && $user->{'sex'} == 1)
+        $was = 'Была';
+
+      while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
+        if ($session['current']) {
+          $text .= '*Онлайн* '. $this->get_session_platform_name($session). ', зашел '. $this->format_time($session['since']). 
+            ', последняя активность была '. $this->format_time($session['till']). ', длительность '. $this->format_duration(time() - $session['since']). "\n\n";
+        } else {
+          $text .= "$was онлайн ". $this->get_session_platform_name($session).
+            ', зашел '. $this->format_time($session['since']). ', вышел '. $this->format_time($session['till']). ', длительность '. $this->format_duration($session['till'] - $session['since']). "\n\n";
+        }
+      }
+    } else {
+      $text = "Вот $count последних сессий:\n";
+      $count = intval($count);
+      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id ORDER BY till DESC LIMIT $count");
+      $sth->execute();
+
+      while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
+        $user = $vk_tools->get_user($session['user_id'], array('sex'));
+        $was = 'Был';
+        if (property_exists($session['user_id'], 'sex') && $user->{'sex'} == 1)
+          $was = 'Была';
+
+        if ($session['current']) {
+          $text .= '['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $session['user_id']. ') *онлайн* '. $this->get_session_platform_name($session).
+            ', зашел '. $this->format_time($session['since']). ', последняя активность была '. $this->format_time($session['till']). ', длительность '. $this->format_duration(time() - $session['since']). "\n\n";
+        } else {
+          $text .= '['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $session['user_id']. ") $was онлайн ". $this->get_session_platform_name($session).
+            ', зашел '. $this->format_time($session['since']). ', вышел '. $this->format_time($session['till']). ', длительность '. $this->format_duration($session['till'] - $session['since']). "\n\n";
+        }
+      }
+    }
+    $this->send_formatted_message($text);
+
+  }
+
+  protected function format_time($time, $print_today = false) {
+    $date = getdate($time);
+
+    if ($date['mday'] == getdate()['mday']) {
+      if ($print_today)
+        return date('сегодня в H:i:s', $time);
+      else
+        return date('в H:i:s', $time);
+    } elseif ($date['mday'] == getdate(time() -86400 )['mday']) {
+        return date('вчера в H:i:s', $time);
+    }
+    
+    return date('Y-m-d в H:i:s', $time);
+  }
+
+  protected function format_duration($duration) {
+    if ($duration > 60*60)
+      return gmdate('G:i:s', $duration);
+    elseif ($duration > 60)
+      return gmdate('i:s', $duration);
+    elseif ($duration != 0)
+      return gmdate('s', $duration);
+    else
+      return 'менее 10 минут';
+  }
+  
   protected function execute($vk_tools, $command, $text) {
     switch ($command) {
       case 'watch':
@@ -246,6 +323,9 @@ class tgTools extends TelegramBot\Api\BotApi{
         break;
       case 'forget':
         $this->execute_forget($vk_tools, $text);
+        break;
+      case 'sessions':
+        $this->execute_sessions($vk_tools, $text);
         break;
       case 'help':
         $this->send_help_message();
