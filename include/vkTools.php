@@ -124,16 +124,17 @@ class vkTools extends vkApi{
     }
   }
 
-  public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile')) {
+  public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile'), $name_case = 'nom') {
     if (is_string($id)) {
       $count = 0;
       $id = str_replace('https://vk.com/', '', $id);
       $id = str_replace('http://vk.com/', '', $id);
       $id = str_replace('vk.com/', '', $id);
     }
-    $user = parent::get_user($id, $fields, 'nom');
-    $this->db->prepare('REPLACE INTO users (id, first_name, last_name) VALUES (:id, :first_name, :last_name)')
-      ->execute(array('id' => $user->{'id'}, 'first_name' => $user->{'first_name'}, 'last_name' =>$user->{'last_name'}));
+    $user = parent::get_user($id, $fields, $name_case);
+    if (strtolower($name_case) == 'nom')
+      $this->db->prepare('REPLACE INTO users (id, first_name, last_name) VALUES (:id, :first_name, :last_name)')
+        ->execute(array('id' => $user->{'id'}, 'first_name' => $user->{'first_name'}, 'last_name' =>$user->{'last_name'}));
 
     return $user;
   }

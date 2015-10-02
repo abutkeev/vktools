@@ -222,7 +222,7 @@ class tgTools extends TelegramBot\Api\BotApi{
         $users_list = '';
         $keyboard = $this->generate_users_keyboard($users, $users_list);
         array_push($keyboard, array('/0 Я передумал!'));
-        $message = $this->send_formatted_message("Хочешь удалить кого-то из списка наблюдения?\n\nВот люди, о которых нам сейчас:\n". $users_list.
+        $message = $this->send_formatted_message("Хочешь удалить кого-то из списка наблюдения?\n\nВот люди, которые там сейчас:\n". $users_list.
             "\nКого удалить?\n\nЕсли ты передумал, пришли в ответ /0.",
             new ReplyKeyboardMarkup($keyboard, true, true));
       }
@@ -234,18 +234,57 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   protected function execute_sessions($vk_tools, $text) {
-    return $this->sessions_action($vk_tools);
+    Logger::log(LOG_DEBUG, 'execute_sessions starting, text: '. $text);
+    if (!isset($text) || $text == '') {
+      $sth = $this->db->prepare('SELECT id, first_name, last_name FROM watch JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id');
+      $sth->execute(array('tg_user_id' => $this->user_id));
+      $users = $sth->fetchAll();
+      if (empty($users)) {
+        $this->sendMessage("В списке неблюдения пусто... Если хочешь чтоб я сохранял сессии, добавь кого-нибудь в список наблюдения.", new ReplyKeyboardHide());
+      } else {
+        $users_list = '';
+
+        $keyboard = array(array('/all Все сессии'));
+        $keyboard = array_merge($keyboard, $this->generate_users_keyboard($users, $users_list));
+        array_push($keyboard, array('/0 Я передумал!'));
+
+        $message = $this->send_formatted_message("Хочешь чтоб я отправил тебе список сохранённых сессий?\n\nВот люди из твоего списка наблюдения:\n". $users_list.
+            "\nЧьи сессии ты хочешь увидеть?\nЕсли ты хочешь увидеть все сессии, пришли в ответ /all.\n\nЕсли ты передумал, пришли в ответ /0.",
+            new ReplyKeyboardMarkup($keyboard, true, true));
+        $message_id = $message->getMessageId();
+        Logger::log(LOG_DEBUG, 'message id: '. $message_id);
+        $this->register_session($message_id, 'sessions');
+      }
+    } else {
+      mb_internal_encoding("UTF-8");
+      mb_regex_encoding('UTF-8');
+      $args = mb_split('\s', $text);
+      if ($args[0] == 'all')
+        return $this->sessions_action($vk_tools);
+      else {
+        try {
+          return $this->sessions_action($vk_tools, $vk_tools->get_user($args[0])->{'id'});
+        } catch (Exception $e) {
+          if ($e->getCode() == 404) {
+            $this->sendMessage('Не могу найти такого пользователя :(');
+          } else {
+            $this->send_fail_message();
+            Logger::log(LOG_ERR, $e->getMessage());
+          } 
+        }
+      }
+    }
   }
 
   protected function sessions_action($vk_tools, $user_id = null, $count = 5) {
     if ($user_id) {
-      $text = "Вот $count последних сессий для [". $vk_tools->get_user_name($session['user_id']). '](https://vk.com/id'. $user_id. "):\n\n";
+      $user = $vk_tools->get_user($user_id, array('sex'), 'gen');
+      $text = "Вот $count последних сессий [". $vk_tools->get_user_name($user). '](https://vk.com/id'. $user_id. "):\n\n";
 
       $count = intval($count);
       $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE u.id = :user_id ORDER BY till DESC LIMIT $count");
       $sth->execute(array('user_id' => $user_id));
 
-      $user = $vk_tools->get_user($user_id, array('sex'));
       $was = 'Был';
       $login = 'зашел';
       $logout = 'вышел';
@@ -290,7 +329,7 @@ class tgTools extends TelegramBot\Api\BotApi{
         }
       }
     }
-    $this->send_formatted_message($text);
+    $this->send_formatted_message($text, new ReplyKeyboardHide());
 
   }
 
@@ -401,6 +440,14 @@ class tgTools extends TelegramBot\Api\BotApi{
             $this->execute_forget($vk_tools, $text);
           elseif ($command != '0')
             $this->execute_forget($vk_tools, $command);
+          else 
+            $this->send_ok_message();
+          return true;
+        case 'sessions':
+          if (!isset($command))
+            $this->execute_sessions($vk_tools, $text);
+          elseif ($command != '0')
+            $this->execute_sessions($vk_tools, $command);
           else 
             $this->send_ok_message();
           return true;
