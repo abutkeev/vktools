@@ -247,16 +247,21 @@ class tgTools extends TelegramBot\Api\BotApi{
 
       $user = $vk_tools->get_user($user_id, array('sex'));
       $was = 'Был';
-      if (property_exists($user, 'sex') && $user->{'sex'} == 1)
+      $login = 'зашел';
+      $logout = 'вышел';
+      if (property_exists($user, 'sex') && $user->{'sex'} == 1) {
         $was = 'Была';
+        $login = 'зашла';
+        $logout = 'вышла';
+      }
 
       while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
         if ($session['current']) {
-          $text .= '*Онлайн* '. $this->get_session_platform_name($session). ', зашел '. $this->format_time($session['since']). 
+          $text .= '*Онлайн* '. $this->get_session_platform_name($session). ", $login ". $this->format_time($session['since']). 
             ', последняя активность была '. $this->format_time($session['till']). ', длительность '. $this->format_duration(time() - $session['since']). "\n\n";
         } else {
           $text .= "$was онлайн ". $this->get_session_platform_name($session).
-            ', зашел '. $this->format_time($session['since']). ', вышел '. $this->format_time($session['till']). ', длительность '. $this->format_duration($session['till'] - $session['since']). "\n\n";
+            ", $login ". $this->format_time($session['since']). ", $logout ". $this->format_time($session['till']). ', длительность '. $this->format_duration($session['till'] - $session['since']). "\n\n";
         }
       }
     } else {
@@ -268,15 +273,20 @@ class tgTools extends TelegramBot\Api\BotApi{
       while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
         $user = $vk_tools->get_user($session['user_id'], array('sex'));
         $was = 'был';
-        if (property_exists($user, 'sex') && $user->{'sex'} == 1)
+        $login = 'зашел';
+        $logout = 'вышел';
+        if (property_exists($user, 'sex') && $user->{'sex'} == 1) {
           $was = 'была';
+          $login = 'зашла';
+          $logout = 'вышла';
+        }
 
         if ($session['current']) {
           $text .= '['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $session['user_id']. ') *онлайн* '. $this->get_session_platform_name($session).
-            ', зашел '. $this->format_time($session['since']). ', последняя активность была '. $this->format_time($session['till']). ', длительность '. $this->format_duration(time() - $session['since']). "\n\n";
+            ", $login ". $this->format_time($session['since']). ', последняя активность была '. $this->format_time($session['till']). ', длительность '. $this->format_duration(time() - $session['since']). "\n\n";
         } else {
           $text .= '['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $session['user_id']. ") $was онлайн ". $this->get_session_platform_name($session).
-            ', зашел '. $this->format_time($session['since']). ', вышел '. $this->format_time($session['till']). ', длительность '. $this->format_duration($session['till'] - $session['since']). "\n\n";
+            ", $login ". $this->format_time($session['since']). ", $logout ". $this->format_time($session['till']). ', длительность '. $this->format_duration($session['till'] - $session['since']). "\n\n";
         }
       }
     }
