@@ -521,7 +521,7 @@ class tgTools extends TelegramBot\Api\BotApi{
   protected function generate_users_keyboard(array $users, &$users_list) {
         $keyboard = array();
         foreach ($users as $user) {
-          $users_list .= '/'. $user['id']. "\t[". $user['first_name']. ' '. $user['last_name']. '](https://vk.com/'. $user['id']. ")\n";
+          $users_list .= '/'. $user['id']. "\t[". $user['first_name']. ' '. $user['last_name']. '](https://vk.com/id'. $user['id']. ")\n";
           array_push($keyboard, array('/'. $user['id']. ' '. $user['first_name']. ' '. $user['last_name']));
         }
 
