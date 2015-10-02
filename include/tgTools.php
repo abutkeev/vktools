@@ -383,6 +383,9 @@ class tgTools extends TelegramBot\Api\BotApi{
       case 'help':
         $this->send_help_message();
         break;
+      case 'start':
+        $this->send_welcome_message();
+        break;
       default:
         $this->send_unknown_command_message();
         break;
@@ -485,9 +488,12 @@ class tgTools extends TelegramBot\Api\BotApi{
   }
 
   protected function send_help_message() {
-    $this->send_formatted_message('Я хотел бы рассказать про то, что я умею, но я сам пока об этом не знаю :(');
+    $this->send_formatted_message('Я хотел бы рассказать про то, что я умею, но я сам пока об этом не знаю :( Пока можешь посмотреть список команд, нажав /.');
   }
 
+  protected function send_welcome_message() {
+    $this->send_formatted_message('Привет! Я бот для вконтактика. Пока я мало что умею, но [папочка](https://telegram.me/abutkeev) обещал научить меня ещё кое-чему. Напиши /help, если хочешь узнать больше!');
+  }
   // actions
   protected function watch_action($user_id) {
     $sth = $this->db->prepare('SELECT * FROM watch WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
