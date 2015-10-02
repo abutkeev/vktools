@@ -268,7 +268,7 @@ class tgTools extends TelegramBot\Api\BotApi{
       while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
         $user = $vk_tools->get_user($session['user_id'], array('sex'));
         $was = 'был';
-        if (property_exists($session['user_id'], 'sex') && $user->{'sex'} == 1)
+        if (property_exists($user, 'sex') && $user->{'sex'} == 1)
           $was = 'была';
 
         if ($session['current']) {
