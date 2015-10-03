@@ -282,8 +282,8 @@ class tgTools extends TelegramBot\Api\BotApi{
       $text = "Вот $count последних сессий [". $vk_tools->get_user_name($user). '](https://vk.com/id'. $user_id. "):\n\n";
 
       $count = intval($count);
-      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE u.id = :user_id ORDER BY till DESC LIMIT $count");
-      $sth->execute(array('user_id' => $user_id));
+      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE u.id = :user_id AND user_id in (SELECT vk_user_id FROM watch WHERE tg_user_id = :tg_user) ORDER BY till DESC LIMIT $count");
+      $sth->execute(array('user_id' => $user_id, 'tg_user' => $this->user_id));
 
       $was = 'Был';
       $login = 'зашел';
@@ -308,8 +308,8 @@ class tgTools extends TelegramBot\Api\BotApi{
     } else {
       $text = "Вот $count последних сессий:\n";
       $count = intval($count);
-      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id ORDER BY till DESC LIMIT $count");
-      $sth->execute();
+      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE user_id in (SELECT vk_user_id FROM watch WHERE tg_user_id = :tg_user) ORDER BY till DESC LIMIT $count");
+      $sth->execute(array('tg_user' => $this->user_id));
 
       while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
         $user = $vk_tools->get_user($session['user_id'], array('sex'));
