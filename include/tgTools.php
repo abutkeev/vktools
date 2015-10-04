@@ -240,7 +240,7 @@ class tgTools extends TelegramBot\Api\BotApi{
       $sth->execute(array('tg_user_id' => $this->user_id));
       $users = $sth->fetchAll();
       if (empty($users)) {
-        $this->sendMessage("В списке неблюдения пусто... Если хочешь чтоб я сохранял сессии, добавь кого-нибудь в список наблюдения. Отправь мне /watch чтобы это сделать.", new ReplyKeyboardHide());
+        $this->send_formatted_message("В списке неблюдения пусто... Если хочешь чтоб я сохранял сессии, добавь кого-нибудь в список наблюдения. Отправь мне /watch чтобы это сделать.", new ReplyKeyboardHide());
       } else {
         $users_list = '';
 
