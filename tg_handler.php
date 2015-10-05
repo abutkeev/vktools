@@ -7,11 +7,12 @@ Logger::debug(true);
 try {
   Logger::log(LOG_DEBUG, 'starting');
   $tg_tools = new tgTools();
-  $vk_tools = new vkTools();
 
   $message = $tg_tools->parseMessage($HTTP_RAW_POST_DATA);
   
   $tg_tools->saveUser($message->getFrom());
+
+  $vk_tools = new vkTools($tg_tools->getVkUser());
 
   $command = NULL;
   $text = $message->getText();

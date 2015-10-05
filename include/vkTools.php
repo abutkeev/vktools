@@ -8,8 +8,7 @@ class vkTools extends vkApi{
   private $db;
   private $tg;
 
-  function __construct() {
-    parent::__construct(Config::TOKEN);
+  function __construct($user_id = null) {
 
     $dboptions = array(PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8');
     $this->db  = new PDO('mysql:dbname='. Config::DB_NAME. ';host='. Config::DB_HOST, Config::DB_LOGIN, Config::DB_PASSWORD, $dboptions);
@@ -18,6 +17,62 @@ class vkTools extends vkApi{
     Logger::init('vkTools', LOG_PERROR);
 
     $this->tg = new tgTools();
+
+    if (isset($user_id)) {
+      $sth = $this->db->prepare('SELECT token FROM access_tokens WHERE vk_user_id = :user_id AND (till > UNIX_TIMESTAMP() OR till IS NULL)');
+      $sth->execute(array('user_id' => $user_id));
+
+      if (!$result = $sth->fetch(PDO::FETCH_ASSOC))
+        parent::__construct();
+      else
+        parent::__construct($result['token']);
+
+    } else {
+      parent::__construct();
+    }
+  }
+
+  public function getOAuthUrl(array $scope, $state = null) {
+    $params['client_id'] = Config::VK_CLIENT_ID;
+    $params['display'] = 'page';
+    $params['redirect_uri'] = Config::VK_REDIRECT_URL;
+    $params['scope'] = implode(',', $scope);
+    $params['response_type'] = 'code';
+    if (isset($state))
+      $params['state'] = $state;
+
+    return $this->get_oauth_url($params);
+  }
+
+  public function saveToken($code) {
+    $params['client_id'] = Config::VK_CLIENT_ID;
+    $params['client_secret'] = Config::VK_SECRET;
+    $params['redirect_uri'] = Config::VK_REDIRECT_URL;
+    $params['code'] = $code;
+
+    $result = $this->get_access_token($params);
+
+    if (property_exists($result, 'error'))
+      if (property_exists($result, 'error_description'))
+        throw new Exception($result->{'error'}. ': '. $result->{'error_description'});
+      else
+        throw new Exception($result->{'error'});
+
+    if (!property_exists($result, 'access_token'))
+      throw new Exception('no access_token');
+
+    if (!property_exists($result, 'user_id'))
+      throw new Exception('no user_id');
+
+    if (!property_exists($result, 'expires_in') || $result->{'expires_in'} == 0)
+      $till = NULL;
+    else
+      $till = time() + $result->{'expires_in'};
+
+    $this->db->prepare('REPLACE INTO access_tokens (vk_user_id, token, till) VALUES (:user_id, :access_token, :till)')
+      ->execute(array('user_id' => $result->{'user_id'}, 'access_token' => $result->{'access_token'}, 'till' => $till));
+
+    return $result->{'user_id'};
   }
 
   public function merge_sessions($diff = 14*60, $max_age=3600) {

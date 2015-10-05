@@ -1,7 +1,12 @@
 <?php
 
 final class Config {
-  const TOKEN = '';
+  const VK_CLIENT_ID = '';
+  const VK_SECRET = '';
+  const VK_REDIRECT_URL = '';
+
+  const SECRET = '';
+  const URL = '';
 
   const DB_LOGIN = '';
   const DB_PASSWORD = '';

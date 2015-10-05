@@ -27,7 +27,7 @@ class tgTools extends TelegramBot\Api\BotApi{
 
   public function saveUser(User $user) {
     Logger::log(LOG_DEBUG, "saving user ". $user->getId());
-    $this->db->prepare('REPLACE INTO tg_users (id, first_name, last_name, username) VALUES (:id, :first_name, :last_name, :username)')
+    $this->db->prepare('INSERT INTO tg_users (id, first_name, last_name, username) VALUES (:id, :first_name, :last_name, :username) ON DUPLICATE KEY UPDATE first_name=:first_name, last_name=:last_name, username=:username')
       ->execute(array('id' => $user->getId(), 'first_name' => $user->getFirstName(), 'last_name' => $user->getLastName(), 'username' => $user->getUsername()));
 
     $this->user_id = $user->getId();
@@ -58,6 +58,37 @@ class tgTools extends TelegramBot\Api\BotApi{
     } else {
       $this->send_unknown_command_message();
     }
+  }
+
+  public function processCode(vkTools $vk_tools, $code, $state) {
+    $vk_user_id = $vk_tools->saveToken($code);
+
+    $sth = $this->db->prepare('SELECT id FROM tg_users WHERE SHA1(CONCAT(:secret, id)) = :state');
+    $sth->execute(array('secret' => Config::SECRET, 'state' => $state));
+
+    if (! $result = $sth->fetch(PDO::FETCH_ASSOC))
+      throw new Exception('state is invalid');
+
+    $this->db->prepare('UPDATE tg_users SET vk_user_id = :vk_user_id WHERE id = :id')
+      ->execute(array('vk_user_id' => $vk_user_id, 'id' => $result['id']));
+
+    $this->user_id = $result['id'];
+    $this->sendMessage('Получилось!');
+
+    return Config::URL;
+  }
+
+  public function getVkUser() {
+    if (!isset($this->user_id))
+      return null;
+
+    $sth = $this->db->prepare('SELECT vk_user_id FROM tg_users WHERE id = :id');
+    $sth->execute(array('id' => $this->user_id));
+
+    if (! $result = $sth->fetch(PDO::FETCH_ASSOC))
+      return null;
+
+    return $result['vk_user_id'];
   }
 
   public function notify($session_id) {
@@ -394,6 +425,16 @@ class tgTools extends TelegramBot\Api\BotApi{
       return 'менее 10 минут';
   }
   
+  protected function execute_auth($vk_tools) {
+    Logger::log(LOG_DEBUG, 'execute_auth starting');
+    $state = sha1(Config::SECRET.$this->user_id);
+    Logger::log(LOG_DEBUG, 'state: '. $state);
+    $url = $vk_tools->getOAuthUrl(array('offline'), $state);
+    Logger::log(LOG_DEBUG, 'url: '. $url);
+    
+    $this->sendMessage('Хочешь авторизоваться? Перейди по ссылке: '. $url);
+  }
+
   protected function execute($vk_tools, $command, $text) {
     switch ($command) {
       case 'watch':
@@ -413,6 +454,9 @@ class tgTools extends TelegramBot\Api\BotApi{
         break;
       case 'sessions':
         $this->execute_sessions($vk_tools, $text);
+        break;
+      case 'auth':
+        $this->execute_auth($vk_tools);
         break;
       case 'help':
         $this->send_help_message();
