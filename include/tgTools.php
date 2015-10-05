@@ -276,6 +276,24 @@ class tgTools extends TelegramBot\Api\BotApi{
     }
   }
 
+  protected function execute_online($vk_tools) {
+    $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE user_id in (SELECT vk_user_id FROM watch WHERE tg_user_id = :tg_user) AND current IS NOT NULL ORDER BY till DESC");
+    $sth->execute(array('tg_user' => $this->user_id));
+
+    $text = '';
+
+    while ($session = $sth->fetch(PDO::FETCH_ASSOC)) {
+      $user = $vk_tools->get_user($session['user_id'], array('sex'));
+      $female = property_exists($user, 'sex') && $user->{'sex'} == 1;
+
+      $text .= $this->get_session_text($session, $female, $vk_tools->get_user_name($user));
+    }
+    if ($text != '' )
+      $this->send_formatted_message($text, new ReplyKeyboardHide());
+    else
+      $this->send_formatted_message('Из твоего списка наблюдения никого в онлайне нет :(', new ReplyKeyboardHide());
+  }
+
   protected function sessions_action($vk_tools, $user_id = null, $count = 5) {
     if ($user_id) {
       $user = $vk_tools->get_user($user_id, array('sex'), 'gen');
@@ -389,6 +407,9 @@ class tgTools extends TelegramBot\Api\BotApi{
         break;
       case 'forget':
         $this->execute_forget($vk_tools, $text);
+        break;
+      case 'online':
+        $this->execute_online($vk_tools);
         break;
       case 'sessions':
         $this->execute_sessions($vk_tools, $text);
