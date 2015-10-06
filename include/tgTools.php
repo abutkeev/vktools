@@ -41,6 +41,12 @@ class tgTools extends TelegramBot\Api\BotApi{
     if ($text[0] == '/') {
       $tmp = explode(' ', $text);
       $command = substr(array_shift($tmp), 1);
+
+      $tmp1 = explode('_', $command);
+      $command = array_shift($tmp1);
+
+      $tmp = array_merge($tmp1, $tmp);
+
       $text = implode(' ', $tmp);
       return $command;
     }
