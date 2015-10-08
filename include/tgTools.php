@@ -300,7 +300,7 @@ class tgTools extends TelegramBot\Api\BotApi{
         return $this->sessions_action($vk_tools);
       else {
         try {
-          return $this->sessions_action($vk_tools, $vk_tools->get_user($args[0])->{'id'});
+          return $this->sessions_action($vk_tools, $vk_tools->get_user($args[0], array())->{'id'});
         } catch (Exception $e) {
           if ($e->getCode() == 404) {
             $this->sendMessage('Не могу найти такого пользователя :(');

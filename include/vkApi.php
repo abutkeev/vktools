@@ -70,10 +70,12 @@ class vkApi {
     return $this->call('users.get', array('user_ids' => $ids, 'fields' => implode(',', $fields), 'name_case' => $name_case));
   }
 
-  public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile'), $name_case = 'nom') {
-    $result = $this->get_users($id, $fields, $name_case);
+  protected function check_get_users_response($result) {
+    if (is_array($result))
+      return;
+
     if (!property_exists($result, 'response'))
-      throw new Exception('No response property');
+      throw new Exception('No response property, result:'. var_export($response, true));
 
     if (!is_array($result->{'response'}))
       throw new Exception('Response is not array');
@@ -83,8 +85,15 @@ class vkApi {
 
     if (count($result->{'response'}) != 1 )
       throw new Exception('Response have '. count($result->{'response'}). ' items');
+  }
 
-    return $result->{'response'}[0];
+  public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile'), $name_case = 'nom') {
+    $result = $this->get_users($id, $fields, $name_case);
+    $this->check_get_users_response($result);
+    if (is_array($result))
+      return $result[0];
+    else
+      return $result->{'response'}[0];
   }
 
   public function get_online($user_id) {

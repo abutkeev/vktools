@@ -120,6 +120,7 @@ class vkTools extends vkApi{
       $user_id = $user['vk_user_id'];
       Logger::log(LOG_DEBUG, "save online for $user_id");
       $this->save_online($user_id);
+      sleep(1);
     }
     Logger::temporary_debug_off();
   }
@@ -186,12 +187,109 @@ class vkTools extends vkApi{
       $id = str_replace('http://vk.com/', '', $id);
       $id = str_replace('vk.com/', '', $id);
     }
-    $user = parent::get_user($id, $fields, $name_case);
+    if (intval($id) == $id) {
+      return $this->get_user_from_db($id, $fields, $name_case);
+    } else {
+      $user = parent::get_user($id, $fields, $name_case);
+      $this->save_user_to_db($user, $name_case);
+    }
+
     if (strtolower($name_case) == 'nom')
       $this->db->prepare('REPLACE INTO users (id, first_name, last_name) VALUES (:id, :first_name, :last_name)')
         ->execute(array('id' => $user->{'id'}, 'first_name' => $user->{'first_name'}, 'last_name' =>$user->{'last_name'}));
 
     return $user;
+  }
+
+  public function get_users($ids, $fields = array(), $name_case = 'nom') {
+    $response = parent::get_users($ids, $fields, $name_case);
+
+    $this->check_get_users_response($response);
+    foreach ($response->{'response'} as $user) {
+      $this->save_user_to_db($user, $name_case);
+    }
+
+    return $response->{'response'};
+  }
+
+
+  protected function get_user_from_db($id, $fields = array(), $name_case = 'nom') {
+//    Logger::temporary_debug_on();
+    $sth = $this->db->prepare('SELECT type, value FROM user_properties WHERE user_id = :id AND updated > DATE_SUB(NOW(), INTERVAL 30 MINUTE)');
+    $sth->execute(array('id' => $id));
+
+    $user = new stdClass();
+    $user->{'id'} = $id;
+
+    while ($field = $sth->fetch(PDO::FETCH_ASSOC)) {
+      $user->{$field['type']} = json_decode($field['value']);
+    }
+
+    if (!$this->check_fields($user, $fields, $name_case)) {
+      $user = parent::get_user($id, $fields, $name_case);
+      $this->save_user_to_db($user, $name_case);
+      Logger::temporary_debug_off();
+      return $user;
+    } else {
+      Logger::log(LOG_DEBUG, 'returning user data from db');
+      Logger::temporary_debug_off();
+      return $user;
+    }
+  }
+
+  private $skip_user_fields = array('online', 'last_seen', 'online_mobile', 'online_app', 'id');
+
+  private function check_fields(stdClass &$user, $fields, $name_case = 'nom'){
+    $name_case = strtolower($name_case);
+
+    if ($name_case != 'nom') {
+      if (property_exists($user, 'first_name_'. $name_case) && property_exists($user, 'last_name_'. $name_case)) {
+        $user->{'first_name'} = $user->{'first_name_'. $name_case};
+        $user->{'last_name'} = $user->{'last_name_'. $name_case};
+      } else {
+        Logger::log(LOG_DEBUG, "no first_name, last_name property for $name_case in user object, requesting user");
+        return false;
+      }
+    }
+
+    if (! property_exists($user, 'id') || ! property_exists($user, 'first_name') || ! property_exists($user, 'last_name')) {
+      Logger::log(LOG_DEBUG, "no first_name, last_name or id property in user object, requesting user");
+      return false;
+    }
+
+    foreach ($this->skip_user_fields as $skip) {
+      if (in_array($skip, $fields)) {
+        Logger::log(LOG_DEBUG, "find $skip in fields, requesting user");
+        return false;
+      }
+    }
+
+    foreach ($fields as $field) {
+      if (!property_exists($user, $field)) {
+        Logger::log(LOG_DEBUG, "property $field not in db or expired, requesting user");
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+
+  protected function save_user_to_db(stdClass $user, $name_case = 'nom') {
+    if (!property_exists($user, 'id'))
+      throw new Exception('no user id');
+
+    $name_case = strtolower($name_case);
+    foreach (get_object_vars($user) as $type => $value) {
+      if (in_array($type, $this->skip_user_fields))
+        continue;
+
+      if ($name_case != 'nom' && ($type == 'first_name' || $type == 'last_name'))
+          $type .= '_'. $name_case;
+
+      $this->db->prepare('INSERT INTO user_properties (user_id, type, value) VALUES (:user_id, :type, :value) ON DUPLICATE KEY UPDATE value=:value, updated=NOW()')
+        ->execute(array('user_id' => $user->{'id'}, 'type' => $type, 'value' => json_encode($value)));
+    }
   }
 }
 ?>
