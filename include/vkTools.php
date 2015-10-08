@@ -187,9 +187,11 @@ class vkTools extends vkApi{
       $id = str_replace('http://vk.com/', '', $id);
       $id = str_replace('vk.com/', '', $id);
     }
-    if (intval($id) == $id) {
+    if (is_numeric($id) && intval($id) == $id) {
+      Logger::log(LOG_DEBUG, "user_id $id is int, getting user data from db");
       return $this->get_user_from_db($id, $fields, $name_case);
     } else {
+      Logger::log(LOG_DEBUG, "user_id $id is not int, requesting user data from vk");
       $user = parent::get_user($id, $fields, $name_case);
       $this->save_user_to_db($user, $name_case);
     }
