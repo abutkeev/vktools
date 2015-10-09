@@ -7,11 +7,21 @@ class vkApi {
   private $v = '5.37';
   private $https = '1';
 
-  function __construct($token = null) {
+  private $http_context;
+
+  function __construct($token = null, $timeout = 1) {
     if ($token)
       $this->token = $token;
 
     Logger::init('vkApi', LOG_PERROR);
+    
+    $this->http_context = stream_context_create(
+          array('http' =>
+            array(
+              'timeout' => $timeout,
+            )
+          )
+        );
   }
 
   public function hasToken() {
@@ -30,6 +40,14 @@ class vkApi {
     return implode('&', $params);
   }
 
+  private function http_get($url) {
+    $data = file_get_contents($url, false, $this->http_context);
+    if ($data === FALSE)
+      throw new Exception('file_get_contents returns FALSE');
+
+    return $data;
+  }
+
   protected function call($method, $parameters = array()) {
     if (isset($this->token))
       $parameters['token'] = $this->token; 
@@ -39,8 +57,8 @@ class vkApi {
 
     $url = 'https://api.vk.com/method/'. $method. '?'. $this->get_params_string($parameters);
     Logger::log(LOG_DEBUG, "url: $url");
-    if (! $data = file_get_contents($url) ) 
-      throw new Exception('file_get_contents returns no data');
+
+    $data = $this->http_get($url);
 
     if (! $result = json_decode($data) )
       throw new Exception("can't decode data");
@@ -55,8 +73,7 @@ class vkApi {
   protected function get_access_token(array $parameters) {
     $url = 'https://oauth.vk.com/access_token?'. $this->get_params_string($parameters);
 
-    if (! $data = file_get_contents($url) ) 
-      throw new Exception('file_get_contents returns no data');
+    $data = $this->http_get($url);
 
     if (! $result = json_decode($data) )
       throw new Exception("can't decode data");

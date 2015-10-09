@@ -4,6 +4,7 @@ final class Config {
   const VK_CLIENT_ID = '';
   const VK_SECRET = '';
   const VK_REDIRECT_URL = '';
+  const VK_API_TIMEOUT = 1;
 
   const SECRET = '';
   const URL = '';

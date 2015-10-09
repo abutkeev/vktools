@@ -23,12 +23,12 @@ class vkTools extends vkApi{
       $sth->execute(array('user_id' => $user_id));
 
       if (!$result = $sth->fetch(PDO::FETCH_ASSOC))
-        parent::__construct();
+        parent::__construct(null, Config::VK_API_TIMEOUT);
       else
-        parent::__construct($result['token']);
+        parent::__construct($result['token'], Config::VK_API_TIMEOUT);
 
     } else {
-      parent::__construct();
+      parent::__construct(null, Config::VK_API_TIMEOUT);
     }
   }
 
