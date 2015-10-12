@@ -21,6 +21,8 @@
         new self();
       if ($priority == LOG_DEBUG && self::$debug)
         syslog($priority, $message);
+      elseif ($priority != LOG_DEBUG)
+        syslog($priority, $message);
     }
 
     static function debug($state) {
