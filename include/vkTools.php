@@ -119,8 +119,13 @@ class vkTools extends vkApi{
     while ($user = $sth->fetch(PDO::FETCH_ASSOC)) {
       $user_id = $user['vk_user_id'];
       Logger::log(LOG_DEBUG, "save online for $user_id");
-      $this->save_online($user_id);
-      sleep(1);
+      try {
+        $this->save_online($user_id);
+        Logger::log(LOG_DEBUG, "save online for $user_id done");
+        usleep(0.2 * 1000000);
+      } catch (ErrorException $ex) {
+        Logger::log(LOG_ERR, "got error then saving online for user $user_id: ". $ex->getMessage());
+      }
     }
     Logger::temporary_debug_off();
   }
@@ -131,7 +136,13 @@ class vkTools extends vkApi{
     $sth->execute(array('user_id' => $user_id));
     $db_info = $sth->fetch(PDO::FETCH_ASSOC);
 
-    $info = $this->get_online($user_id);
+    try {
+      $info = $this->get_online($user_id);
+    } catch (Exception $ex) {
+      $this->db->rollBack();
+      throw $ex;
+    }
+
     if ($info['online'] && $this->get_time() - $info['last_seen'] > $online_timeout)
       $info['online'] = 0;
 

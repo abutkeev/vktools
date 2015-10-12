@@ -1,6 +1,11 @@
 <?php
 require_once('Logger.php');
 
+function http_error_handler($severity, $message, $file, $line) {
+  restore_error_handler();
+  throw new ErrorException($message);
+}
+
 class vkApi {
   private $token;
   private $lang = 'ru';
@@ -41,10 +46,12 @@ class vkApi {
   }
 
   private function http_get($url) {
+    set_error_handler('http_error_handler');
     $data = file_get_contents($url, false, $this->http_context);
     if ($data === FALSE)
       throw new Exception('file_get_contents returns FALSE');
 
+    restore_error_handler();
     return $data;
   }
 
