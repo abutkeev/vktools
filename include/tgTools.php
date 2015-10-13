@@ -109,6 +109,15 @@ class tgTools extends TelegramBot\Api\BotApi{
     while ($tg_user = $sth->fetch(PDO::FETCH_ASSOC)) {
       parent::sendMessage($tg_user['tg_user_id'], $this->get_vk_user_name($session['user_id']). ' онлайн'. $this->get_session_platform_name($session), 'Markdown', true);
     }
+
+    $sth = $this->db->prepare('SELECT tg_user_id FROM notify_once WHERE vk_user_id = :vk_user_id');
+    $sth->execute(array('vk_user_id' => $session['user_id']));
+
+    while ($tg_user = $sth->fetch(PDO::FETCH_ASSOC)) {
+      parent::sendMessage($tg_user['tg_user_id'], $this->get_vk_user_name($session['user_id']). ' онлайн'. $this->get_session_platform_name($session), 'Markdown', true);
+      $this->db->prepare('DELETE FROM notify_once WHERE vk_user_id = :vk_user_id AND tg_user_id = :tg_user_id')
+        ->execute(array('vk_user_id' => $session['user_id'], 'tg_user_id' => $tg_user['tg_user_id']));
+    }
     Logger::log(LOG_DEBUG, 'notify finished');
   }
 
@@ -151,19 +160,22 @@ class tgTools extends TelegramBot\Api\BotApi{
     }
   }
 
-  protected function execute_notify($vk_tools, $text) {
+  protected function execute_notify($vk_tools, $text, $once = false) {
     if (isset($text) && $text != '') {
       try {
         $user = $vk_tools->get_user($text, array());
-        if ($this->add_notify_action($user->{'id'})) {
-          $this->send_formatted_message('Теперь я буду писать тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн.', new ReplyKeyboardHide());
+        if ($this->add_notify_action($user->{'id'}, $once)) {
+          if ($once)
+            $this->send_formatted_message('Теперь я напишу тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн в следующий раз.', new ReplyKeyboardHide());
+          else
+            $this->send_formatted_message('Теперь я буду писать тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн.', new ReplyKeyboardHide());
         } else {
           $this->send_formatted_message('Я уже пишу тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появляется онлайн.', new ReplyKeyboardHide());
         }
       } catch (Exception $e) {
         if ($e->getCode() == 4404) {
           $this->execute_watch($vk_tools, $text);
-          $this->execute_notify($vk_tools, $text);
+          $this->execute_notify($vk_tools, $text, $once);
         } elseif ($e->getCode() == 404) {
           $this->sendMessage('Не могу найти такого пользователя :(');
         } else {
@@ -172,25 +184,38 @@ class tgTools extends TelegramBot\Api\BotApi{
         } 
       }
     } else {
-      $sth = $this->db->prepare('SELECT id, first_name, last_name FROM watch JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id AND vk_user_id NOT IN (SELECT vk_user_id FROM notify WHERE tg_user_id = :tg_user_id)');
+      if ($once)
+        $sth = $this->db->prepare('SELECT id, first_name, last_name FROM watch JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id AND vk_user_id NOT IN (SELECT vk_user_id FROM notify WHERE tg_user_id = :tg_user_id) '.
+            'AND vk_user_id NOT IN (SELECT vk_user_id FROM notify_once WHERE tg_user_id = :tg_user_id)');
+      else
+        $sth = $this->db->prepare('SELECT id, first_name, last_name FROM watch JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id AND vk_user_id NOT IN (SELECT vk_user_id FROM notify WHERE tg_user_id = :tg_user_id)');
+
       $sth->execute(array('tg_user_id' => $this->user_id));
       $users = $sth->fetchAll();
+      if ($once)
+        $will_write = 'напишу тебе один раз';
+      else
+        $will_write = 'буду писать тебе';
+
       if (empty($users)) {
-        $message = $this->send_formatted_message("Хорошо, давай добавим нового человека в список наблюдения и я буду писать тебе когда он или она будут онлайн.\n\n".
+        $message = $this->send_formatted_message("Хорошо, давай добавим нового человека в список наблюдения и я $will_write когда он или она будут онлайн.\n\n".
             "Сейчас я уже пишу тебе о выходе в онлайн всех людей из твоего списка наблюдения, поэтому пришли мне _id_, _поддомен_ или _ссылку_ на страницу человека, которого ты хочешь добавить.\n",
             new ForceReply());
       } else {
         $users_list = '';
         $keyboard = $this->generate_users_keyboard($users, $users_list);
         array_push($keyboard, array('/0 Не хочу никого добавлять'));
-        $message = $this->send_formatted_message("Хорошо, давай я буду писать тебе когда нужный тебе человек будут онлайн.\n\nВот люди из твоего списка наблюдения, о которых я тебе ещё не пишу:\n". $users_list.
+        $message = $this->send_formatted_message("Хорошо, давай я $will_write когда нужный тебе человек будут онлайн.\n\nВот люди из твоего списка наблюдения, о которых я тебе ещё не пишу:\n". $users_list.
             "\nЕсли ты передумал и не хочешь никого добавлять, пришли в ответ /0.\nЕсли ты хочешь чтобы я тебе писал о новом человеке, пришли в ответ _id_, _поддомен_ или _ссылку_ на его или её страницу.\n",
             new ReplyKeyboardMarkup($keyboard, true, true));
       }
 
       $message_id = $message->getMessageId();
       Logger::log(LOG_DEBUG, 'message id: '. $message_id);
-      $this->register_session($message_id, 'notify');
+      if ($once)
+        $this->register_session($message_id, 'notifyonce');
+      else
+        $this->register_session($message_id, 'notify');
     }
   }
 
@@ -199,9 +224,9 @@ class tgTools extends TelegramBot\Api\BotApi{
       try {
         $user = $vk_tools->get_user($text, array());
         if ($this->del_notify_action($user->{'id'})) {
-          $this->send_formatted_message('Теперь не буду писать тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн.', new ReplyKeyboardHide());
+          $this->send_formatted_message('Теперь не буду писать тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появляется онлайн.', new ReplyKeyboardHide());
         } else {
-          $this->send_formatted_message('Я же не писал тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появится онлайн! Ну и сейчас не буду :)', new ReplyKeyboardHide());
+          $this->send_formatted_message('Я же не писал тебе когда ['. $vk_tools->get_user_name($user). '](https://vk.com/id'. $user->{'id'}. ') появляется онлайн! Ну и сейчас не буду :)', new ReplyKeyboardHide());
         }
       } catch (Exception $e) {
         if ($e->getCode() == 404) {
@@ -215,6 +240,11 @@ class tgTools extends TelegramBot\Api\BotApi{
       $sth = $this->db->prepare('SELECT id, first_name, last_name FROM notify JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id');
       $sth->execute(array('tg_user_id' => $this->user_id));
       $users = $sth->fetchAll();
+
+      $sth = $this->db->prepare('SELECT id, first_name, last_name FROM notify_once JEFT JOIN users ON id = vk_user_id WHERE tg_user_id = :tg_user_id');
+      $sth->execute(array('tg_user_id' => $this->user_id));
+      $users = array_merge($users, $sth->fetchAll());
+
       if (empty($users)) {
         $message = $this->sendMessage("Сейчас я и так тебе ни о ком не пишу...", new ReplyKeyboardHide());
       } else {
@@ -449,6 +479,9 @@ class tgTools extends TelegramBot\Api\BotApi{
       case 'notify':
         $this->execute_notify($vk_tools, $text);
         break;
+      case 'notifyonce':
+        $this->execute_notify($vk_tools, $text, true);
+        break;
       case 'mute':
         $this->execute_mute($vk_tools, $text);
         break;
@@ -515,6 +548,14 @@ class tgTools extends TelegramBot\Api\BotApi{
             $this->execute_notify($vk_tools, $text);
           elseif ($command != '0')
             $this->execute_notify($vk_tools, $command);
+          else 
+            $this->send_ok_message();
+          return true;
+        case 'notifyonce':
+          if (!isset($command))
+            $this->execute_notify($vk_tools, $text, true);
+          elseif ($command != '0')
+            $this->execute_notify($vk_tools, $command, true);
           else 
             $this->send_ok_message();
           return true;
@@ -589,7 +630,7 @@ class tgTools extends TelegramBot\Api\BotApi{
     return true;
   }
 
-  protected function add_notify_action($user_id) {
+  protected function add_notify_action($user_id, $once = false) {
     $sth = $this->db->prepare('SELECT * FROM watch WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
     $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
     if (!$sth->fetch())
@@ -600,14 +641,29 @@ class tgTools extends TelegramBot\Api\BotApi{
     if ($sth->fetch())
       return false;
 
-    $this->db->prepare('INSERT INTO notify (tg_user_id, vk_user_id) VALUES (:tg_user_id, :vk_user_id)')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    if ($once) {
+      $sth = $this->db->prepare('SELECT * FROM notify_once WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
+      $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+      if ($sth->fetch())
+        return false;
+
+      $this->db->prepare('INSERT INTO notify_once (tg_user_id, vk_user_id) VALUES (:tg_user_id, :vk_user_id)')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    } else {
+      $this->db->prepare('INSERT INTO notify (tg_user_id, vk_user_id) VALUES (:tg_user_id, :vk_user_id)')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+      $this->db->prepare('DELETE FROM notify_once WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    }
+
     return true;
   }
 
   protected function del_notify_action($user_id) {
     $sth = $this->db->prepare('DELETE FROM notify WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
     $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
-    return $sth->rowCount();
+    $cnt =  $sth->rowCount();
+
+    $sth = $this->db->prepare('DELETE FROM notify_once WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
+    $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    return $sth->rowCount() + $cnt;
   }
 
   protected function forget_action($user_id) {
