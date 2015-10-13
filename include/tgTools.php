@@ -668,6 +668,7 @@ class tgTools extends TelegramBot\Api\BotApi{
 
   protected function forget_action($user_id) {
     $this->db->prepare('DELETE FROM notify WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
+    $this->db->prepare('DELETE FROM notify_once WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id')->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
     $sth = $this->db->prepare('DELETE FROM watch WHERE tg_user_id = :tg_user_id AND vk_user_id = :vk_user_id');
     $sth->execute(array('tg_user_id' => $this->user_id, 'vk_user_id' => $user_id));
     return $sth->rowCount();
