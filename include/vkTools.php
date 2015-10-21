@@ -7,10 +7,12 @@ include_once('tgTools.php');
 class vkTools extends vkApi{
   private $db;
   private $tg;
+  private $user_id;
+  private $skip_user_fields = array('online', 'last_seen', 'online_mobile', 'online_app', 'id', 'counters/online_friends');
 
   function __construct($user_id = null) {
 
-    $dboptions = array(PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8');
+    $dboptions = array(PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4');
     $this->db  = new PDO('mysql:dbname='. Config::DB_NAME. ';host='. Config::DB_HOST, Config::DB_LOGIN, Config::DB_PASSWORD, $dboptions);
     $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
@@ -24,8 +26,10 @@ class vkTools extends vkApi{
 
       if (!$result = $sth->fetch(PDO::FETCH_ASSOC))
         parent::__construct(null, Config::VK_API_TIMEOUT);
-      else
+      else {
         parent::__construct($result['token'], Config::VK_API_TIMEOUT);
+        $this->user_id = $user_id;
+      }
 
     } else {
       parent::__construct(null, Config::VK_API_TIMEOUT);
@@ -225,6 +229,14 @@ class vkTools extends vkApi{
     return $response->{'response'};
   }
 
+  public function saveUsersAttrs ($user_id) {
+    $info = $this->get_user_full($user_id);
+    // TODO: implement attrs remove
+    foreach (get_object_vars($info) as $name => $value) {
+      $this->save_user_attr($user_id, $name, $value);
+    }
+  }
+
 
   protected function get_user_from_db($id, $fields = array(), $name_case = 'nom') {
 //    Logger::temporary_debug_on();
@@ -250,7 +262,6 @@ class vkTools extends vkApi{
     }
   }
 
-  private $skip_user_fields = array('online', 'last_seen', 'online_mobile', 'online_app', 'id');
 
   private function check_fields(stdClass &$user, $fields, $name_case = 'nom'){
     $name_case = strtolower($name_case);
@@ -287,6 +298,71 @@ class vkTools extends vkApi{
     return true;
   }
 
+  private function save_user_attr($user_id, $name, $value) {
+    if (in_array($name, $this->skip_user_fields))
+      return;
+
+    if (is_int($value)) {
+      $this->save_user_int_attr_change($user_id, $name, $value);
+      $sth = $this->db->prepare('REPLACE INTO users_attrs (user_id, requester_id, name, int_val, str_val, updated) VALUES (:user_id, :requester_id, :name, :value, NULL, NOW())')
+        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'value' => $value));
+
+    } elseif (is_string($value)) {
+      $this->save_user_str_attr_change($user_id, $name, $value);
+      $sth = $this->db->prepare('REPLACE INTO users_attrs (user_id, requester_id, name, int_val, str_val, updated) VALUES (:user_id, :requester_id, :name, NULL, :value, NOW())')
+        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'value' => $value));
+
+    } elseif (is_object($value)) {
+      foreach (get_object_vars($value) as $n => $v) {
+        $this->save_user_attr($user_id, $name. '/'. $n, $v);
+      }
+    } elseif (is_array($value)) {
+      foreach ($value as $n => $v) {
+        $this->save_user_attr($user_id, $name. '/'. $n, $v);
+      }
+    } else {
+      throw new Exception('value has unexpected type: '. var_export($value, true));
+    }
+
+  }
+
+  private function get_user_attr($user_id, $name) {
+    $sth = $this->db->prepare('SELECT int_val, str_val FROM users_attrs WHERE user_id = :user_id AND requester_id = :requester_id AND name = :name');
+    $sth->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name));
+
+    return $sth->fetch(PDO::FETCH_ASSOC);
+  }
+
+  private function save_user_int_attr_change($user_id, $name, $value) {
+    Logger::log(LOG_DEBUG, "save_user_int_attr_change starting, user_id: $user_id, name: $name, value: $value");
+    if ($old = $this->get_user_attr($user_id, $name)) {
+      Logger::log(LOG_DEBUG, 'old str_val: '. $old['str_val']. ', old int_val: '. $old['int_val']);
+      if ($old['int_val'] != $value) {
+        Logger::log(LOG_INFO, "$name value changed for user $user_id: new: $value, old: ". $old['int_val']);
+        $this->db->prepare('INSERT INTO users_attrs_change (user_id, requester_id, name, old_int_val, new_int_val, old_str_val, new_str_val) VALUES (:user_id, :requester_id, :name, :old_int_val, :value, :old_str_val, NULL)')
+          ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'old_int_val' => $old['int_val'], 'value' => $value, 'old_str_val' => $old['str_val']));
+      }
+    } else {
+      $this->db->prepare('INSERT INTO users_attrs_change (user_id, requester_id, name, old_int_val, new_int_val, old_str_val, new_str_val) VALUES (:user_id, :requester_id, :name, NULL, :value, NULL, NULL)')
+        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'value' => $value));
+    }
+  }
+
+  private function save_user_str_attr_change($user_id, $name, $value) {
+    Logger::log(LOG_DEBUG, "save_user_str_attr_change starting, user_id: $user_id, name: $name, value: $value");
+    if ($old = $this->get_user_attr($user_id, $name)) {
+      Logger::log(LOG_DEBUG, 'old str_val: '. $old['str_val']. ', old int_val: '. $old['int_val']);
+      if ($old['str_val'] != $value) {
+        Logger::log(LOG_INFO, "$name value changed for user $user_id: new: $value, old: ". $old['str_val']);
+        $this->db->prepare('INSERT INTO users_attrs_change (user_id, requester_id, name, old_int_val, new_int_val, old_str_val, new_str_val) VALUES (:user_id, :requester_id, :name, :old_int_val, NULL, :old_str_val, :value)')
+          ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'old_int_val' => $old['int_val'], 'value' => $value, 'old_str_val' => $old['str_val']));
+      }
+    } else {
+      Logger::log(LOG_DEBUG, 'no old values');
+      $this->db->prepare('INSERT INTO users_attrs_change (user_id, requester_id, name, old_int_val, new_int_val, old_str_val, new_str_val) VALUES (:user_id, :requester_id, :name, NULL, NULL, NULL, :value)')
+        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'value' => $value));
+    }
+  }
 
   protected function save_user_to_db(stdClass $user, $name_case = 'nom') {
     if (!property_exists($user, 'id'))

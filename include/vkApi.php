@@ -57,7 +57,7 @@ class vkApi {
 
   protected function call($method, $parameters = array()) {
     if (isset($this->token))
-      $parameters['token'] = $this->token; 
+      $parameters['access_token'] = $this->token; 
     $parameters['lang'] = $this->lang; 
     $parameters['v'] = $this->v; 
     $parameters['https'] = $this->https; 
@@ -99,7 +99,7 @@ class vkApi {
       return;
 
     if (!property_exists($result, 'response'))
-      throw new Exception('No response property, result:'. var_export($response, true));
+      throw new Exception('No response property, result:'. var_export($result, true));
 
     if (!is_array($result->{'response'}))
       throw new Exception('Response is not array');
@@ -118,6 +118,53 @@ class vkApi {
       return $result[0];
     else
       return $result->{'response'}[0];
+  }
+
+  public function get_user_full($id) {
+    $fields = array(
+          'sex',
+          'online', // disable cache
+          'bdate',
+          'city',
+          'country',
+          'photo_50',
+          'photo_100',
+          'photo_200_orig',
+          'photo_200',
+          'photo_400_orig',
+          'photo_max',
+          'photo_max_orig',
+          'photo_id',
+          'domain',
+          'contacts',
+          'connections',
+          'site',
+          'education',
+          'universities',
+          'schools',
+          'status',
+          'relation',
+          'relatives',
+          'counters',
+          'screen_name',
+          'maiden_name',
+          'timezone',
+          'occupation',
+          'activities',
+          'interests',
+          'music',
+          'movies',
+          'tv',
+          'books',
+          'games',
+          'about',
+          'quotes',
+          'personal',
+          'friend_status',
+          'military',
+          'career',
+        );
+    return $this->get_user($id, $fields, 'nom', true);
   }
 
   public function get_online($user_id) {
