@@ -196,6 +196,7 @@ class vkTools extends vkApi{
   }
 
   public function get_user($id, $fields = array('online', 'last_seen', 'online_mobile'), $name_case = 'nom') {
+    Logger::log(LOG_DEBUG, "get_user starting, id: $id, name_case: $name_case");
     if (is_string($id)) {
       $count = 0;
       $id = str_replace('https://vk.com/', '', $id);
@@ -211,9 +212,11 @@ class vkTools extends vkApi{
       $this->save_user_to_db($user, $name_case);
     }
 
-    if (strtolower($name_case) == 'nom')
+    if (strtolower($name_case) == 'nom') {
+      Logger::log(LOG_DEBUG, 'Saving vk user to db: id: '. $user->{'id'}. ', first_name: '. $user->{'first_name'}. ', last_name: '. $user->{'last_name'});
       $this->db->prepare('REPLACE INTO users (id, first_name, last_name) VALUES (:id, :first_name, :last_name)')
-        ->execute(array('id' => $user->{'id'}, 'first_name' => $user->{'first_name'}, 'last_name' =>$user->{'last_name'}));
+        ->execute(array('id' => $user->{'id'}, 'first_name' => $user->{'first_name'}, 'last_name' => $user->{'last_name'}));
+    }
 
     return $user;
   }
