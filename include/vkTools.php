@@ -240,6 +240,65 @@ class vkTools extends vkApi{
     $this->clear_user_attrs($user_id);
   }
 
+  public function saveUsersSubscriptions($user_id) {
+    $current = $this->get_subscriptions($user_id);
+    $old = $this->get_subscriptions_from_db($user_id);
+
+    $params = array('user_id' => $user_id);
+    $new_sth = $this->db->prepare('INSERT INTO user_subscriptions (user_id, subscription_id, type) VALUES (:user_id, :value, :type)');
+    $delete_sth = $this->db->prepare('DELETE FROM user_subscriptions WHERE user_id = :user_id AND subscription_id = :value AND type = :type');
+    $log_sth = $this->db->prepare('INSERT INTO user_subscriptions_change (user_id, subscription_id, type, action) VALUES (:user_id, :value, :type, :action)');
+
+    $action = 'follow';
+    $params['type'] = 'user';
+    foreach (array_diff($current->{'users'}->{'items'}, $old['users']) as $new_user) {
+      $params['value'] = $new_user;
+      $new_sth->execute($params);
+      $log_sth->execute(array_merge($params, array('action' => $action)));
+    }
+
+    $params['type'] = 'page';
+    foreach (array_diff($current->{'groups'}->{'items'}, $old['pages']) as $new_page) {
+      $params['value'] = $new_page;
+      $new_sth->execute($params);
+      $log_sth->execute(array_merge($params, array('action' => $action)));
+    }
+
+    $action = 'unfollow';
+    $params['type'] = 'user';
+    foreach (array_diff($old['users'], $current->{'users'}->{'items'}) as $delete_user) {
+      $params['value'] = $delete_user;
+      $delete_sth->execute($params);
+      $log_sth->execute(array_merge($params, array('action' => $action)));
+    }
+
+    $params['type'] = 'page';
+    foreach (array_diff($old['pages'], $current->{'groups'}->{'items'}) as $delete_page) {
+      $params['value'] = $delete_page;
+      $delete_sth->execute($params);
+      $log_sth->execute(array_merge($params, array('action' => $action)));
+    }
+  }
+
+  private function get_subscriptions_from_db($user_id) {
+    $sth = $this->db->prepare('SELECT subscription_id, type FROM user_subscriptions WHERE user_id = :user_id');
+    $sth->execute(array('user_id' => $user_id));
+
+    $result = array('users' => array(), 'pages' => array());
+    while ($row = $sth->fetch(PDO::FETCH_ASSOC)) {
+      switch ($row['type']) {
+        case 'user':
+          array_push($result['users'], $row['subscription_id']);
+          break;
+        case 'page':
+          array_push($result['pages'], $row['subscription_id']);
+          break;
+        default:
+          throw new Exception('Unexpected type '. $row['type']);
+      }
+    }
+    return $result;
+  }
 
   protected function get_user_from_db($id, $fields = array(), $name_case = 'nom') {
 //    Logger::temporary_debug_on();

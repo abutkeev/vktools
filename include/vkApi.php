@@ -94,6 +94,27 @@ class vkApi {
     return $this->call('users.get', array('user_ids' => $ids, 'fields' => implode(',', $fields), 'name_case' => $name_case));
   }
 
+  public function get_subscriptions($user_id, $extended = 0, $offset = NULL, $count = NULL, array $fields = array()) {
+    $params = array('user_id' => $user_id);
+    if ($extended) {
+      $params['extended'] = $extended;
+      if (isset($offset))
+        $params['offset'] = $offset;
+
+      if (isset($count))
+        $params['count'] = $count;
+
+      if (!empty($fields))
+        $params['count'] = implode(',', $fields);
+    }
+    $result = $this->call('users.getSubscriptions', $params);
+
+    if (!property_exists($result, 'response'))
+      throw new Exception('No response property, result:'. var_export($result, true));
+
+    return $result->{'response'};
+  }
+
   protected function check_get_users_response($result) {
     if (is_array($result))
       return;
