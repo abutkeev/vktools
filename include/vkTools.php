@@ -363,7 +363,7 @@ class vkTools extends vkApi{
   private $attr_names = array();
 
   private function fill_user_attrs($user_id) {
-    $sth = $this->db->prepare('SELECT name, int_val, str_val FROM users_attrs WHERE user_id = :user_id AND requester_id = :requester_id');
+    $sth = $this->db->prepare('SELECT name, int_val, str_val, confirmation_cnt FROM users_attrs WHERE user_id = :user_id AND requester_id = :requester_id');
     $sth->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id));
 
     $this->attr_names = array();
@@ -371,6 +371,7 @@ class vkTools extends vkApi{
     while ($attr = $sth->fetch(PDO::FETCH_ASSOC)) {
       $this->attr_names[$user_id][$attr['name']]['int_val'] = $attr['int_val'];
       $this->attr_names[$user_id][$attr['name']]['str_val'] = $attr['str_val'];
+      $this->attr_names[$user_id][$attr['name']]['confirmation_cnt'] = $attr['confirmation_cnt'];
     }
   }
 
@@ -381,12 +382,18 @@ class vkTools extends vkApi{
     }
 
     foreach($this->attr_names[$user_id] as $name => $old) {
-      Logger::log(LOG_DEBUG, "clearing $name from $user_id: ". var_export($old, true));
-      $this->db->prepare('INSERT INTO users_attrs_change (user_id, requester_id, name, old_int_val, new_int_val, old_str_val, new_str_val) VALUES (:user_id, :requester_id, :name, :old_int_val, NULL, :old_str_val, NULL)')
-        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'old_int_val' => $old['int_val'], 'old_str_val' => $old['str_val']));
+      if ($old['confirmation_cnt'] >= 10) {
+        Logger::log(LOG_DEBUG, "clearing $name from $user_id: ". var_export($old, true));
+        $this->db->prepare('INSERT INTO users_attrs_change (user_id, requester_id, name, old_int_val, new_int_val, old_str_val, new_str_val) VALUES (:user_id, :requester_id, :name, :old_int_val, NULL, :old_str_val, NULL)')
+          ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'old_int_val' => $old['int_val'], 'old_str_val' => $old['str_val']));
 
-      $this->db->prepare('DELETE FROM users_attrs WHERE user_id = :user_id AND requester_id = :requester_id AND name = :name')
-        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name));
+        $this->db->prepare('DELETE FROM users_attrs WHERE user_id = :user_id AND requester_id = :requester_id AND name = :name')
+          ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name));
+      } else {
+        Logger::log(LOG_DEBUG, "Don't clear user $user_id attr $name because confirmation_cnt=". $old['confirmation_cnt']);
+        $this->db->prepare('UPDATE users_attrs SET confirmation_cnt = confirmation_cnt + 1 WHERE user_id = :user_id AND requester_id = :requester_id AND name = :name')
+          ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name));
+      }
     }
     unset($this->attr_names[$user_id]);
   }
@@ -395,16 +402,19 @@ class vkTools extends vkApi{
     if (in_array($name, $this->skip_user_fields))
       return;
 
-    if (is_int($value)) {
+    if (empty($value) && isset($this->attr_names[$user_id][$name]) && $this->attr_names[$user_id][$name]['confirmation_cnt'] < 10) {
+      Logger::log(LOG_DEBUG, "Don't save user $user_id empty attr $name because confirmation_cnt=". $this->attr_names[$user_id][$name]['confirmation_cnt']);
+      unset($this->attr_names[$user_id][$name]);
+      $this->db->prepare('UPDATE users_attrs SET confirmation_cnt = confirmation_cnt + 1 WHERE user_id = :user_id AND requester_id = :requester_id AND name = :name')
+        ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name));
+    } elseif (is_int($value)) {
       $this->save_user_int_attr_change($user_id, $name, $value);
-      $sth = $this->db->prepare('REPLACE INTO users_attrs (user_id, requester_id, name, int_val, str_val, updated) VALUES (:user_id, :requester_id, :name, :value, NULL, NOW())')
+      $this->db->prepare('REPLACE INTO users_attrs (user_id, requester_id, name, int_val, str_val, updated, confirmation_cnt) VALUES (:user_id, :requester_id, :name, :value, NULL, NOW(), 0)')
         ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'value' => $value));
-
     } elseif (is_string($value)) {
       $this->save_user_str_attr_change($user_id, $name, $value);
-      $sth = $this->db->prepare('REPLACE INTO users_attrs (user_id, requester_id, name, int_val, str_val, updated) VALUES (:user_id, :requester_id, :name, NULL, :value, NOW())')
+      $this->db->prepare('REPLACE INTO users_attrs (user_id, requester_id, name, int_val, str_val, updated, confirmation_cnt) VALUES (:user_id, :requester_id, :name, NULL, :value, NOW(), 0)')
         ->execute(array('user_id' => $user_id, 'requester_id' => $this->user_id, 'name' => $name, 'value' => $value));
-
     } elseif (is_object($value)) {
       foreach (get_object_vars($value) as $n => $v) {
         $this->save_user_attr($user_id, $name. '/'. $n, $v);
