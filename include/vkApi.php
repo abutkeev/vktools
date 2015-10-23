@@ -94,6 +94,15 @@ class vkApi {
     return $this->call('users.get', array('user_ids' => $ids, 'fields' => implode(',', $fields), 'name_case' => $name_case));
   }
 
+  public function is_group_member($group_id, $user_id) {
+    $result = $this->call('groups.isMember', array('group_id' => $group_id, 'user_id' => $user_id));
+
+    if (!property_exists($result, 'response'))
+      throw new Exception('No response property, result:'. var_export($result, true));
+
+    return $result->{'response'};
+  }
+
   public function get_subscriptions($user_id, $extended = 0, $offset = NULL, $count = NULL, array $fields = array()) {
     $params = array('user_id' => $user_id);
     if ($extended) {

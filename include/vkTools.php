@@ -274,6 +274,13 @@ class vkTools extends vkApi{
 
     $params['type'] = 'page';
     foreach (array_diff($old['pages'], $current->{'groups'}->{'items'}) as $delete_page) {
+      try {
+        if ($this->is_group_member($delete_page, $user_id))
+          continue;
+      } catch (Exception $ex) {
+        Logger::log(LOG_DEBUG, "got exception while checking $user_id membership in $delete_page: ". $ex->getMessage());
+        continue;
+      }
       $params['value'] = $delete_page;
       $delete_sth->execute($params);
       $log_sth->execute(array_merge($params, array('action' => $action)));
