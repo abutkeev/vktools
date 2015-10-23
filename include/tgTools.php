@@ -345,7 +345,7 @@ class tgTools extends TelegramBot\Api\BotApi{
 
   protected function execute_online($vk_tools) {
     try {
-      $sth = $this->db->prepare("SELECT u.id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE user_id in (SELECT vk_user_id FROM watch WHERE tg_user_id = :tg_user) AND current IS NOT NULL ORDER BY till DESC");
+      $sth = $this->db->prepare("SELECT o.user_id AS user_id, first_name, last_name, since, till, platform, mobile, app, current FROM online o LEFT JOIN users u ON u.id = o.user_id WHERE user_id in (SELECT vk_user_id FROM watch WHERE tg_user_id = :tg_user) AND current IS NOT NULL ORDER BY till DESC");
       $sth->execute(array('tg_user' => $this->user_id));
 
       $text = '';
