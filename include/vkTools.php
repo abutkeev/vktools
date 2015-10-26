@@ -234,9 +234,20 @@ class vkTools extends vkApi{
 
   public function saveUsersAttrs ($user_id) {
     $info = $this->get_user_full($user_id);
+
+    if (property_exists($info, 'status_audio')) {
+      Logger::log(LOG_DEBUG, "saving current audio for $user_id");
+      $this->save_current_audio($user_id, $info->{'status_audio'});
+      unset($info->{'status_audio'});
+    } else {
+      Logger::log(LOG_DEBUG, "clearing current audio for $user_id");
+      $this->clear_current_audio($user_id);
+    }
+
     foreach (get_object_vars($info) as $name => $value) {
       $this->save_user_attr($user_id, $name, $value);
     }
+
     $this->clear_user_attrs($user_id);
   }
 
@@ -403,6 +414,57 @@ class vkTools extends vkApi{
       }
     }
     unset($this->attr_names[$user_id]);
+  }
+
+  private function save_audio(StdClass $audio) {
+    try {
+      $params = get_object_vars($audio);
+      unset($params['url']);
+
+      $optional = array('lyrics_id', 'album_id', 'genre_id', 'date');
+      foreach ($optional as $field) {
+        if (!array_key_exists($field, $params))
+          $params[$field] = NULL;
+      }
+
+      $this->db->prepare('INSERT INTO audio (id, owner_id, artist, title, duration, lyrics_id, album_id, genre_id, created, modified) VALUES (:id, :owner_id, :artist, :title, :duration, :lyrics_id, :album_id, :genre_id, :date, UNIX_TIMESTAMP()) '.
+          'ON DUPLICATE KEY UPDATE artist = :artist, title = :title, duration = :duration, lyrics_id = :lyrics_id, album_id = :album_id, genre_id = :genre_id, modified = UNIX_TIMESTAMP(), deleted = NULL')
+        ->execute($params);
+
+      return true;
+    } catch (Exception $ex) {
+      Logger::log(LOG_ERR, 'got exception while saving audio: '. $ex->getMessage());
+      return false;
+    }
+  }
+
+  private function check_current_audio($user_id, $audio_id, $owner_id) {
+    $sth = $this->db->prepare('SELECT id FROM status_audio WHERE user_id = :user_id AND audio_id = :audio_id AND owner_id = :owner_id AND current IS NOT NULL');
+    $sth->execute(array('user_id' => $user_id, 'audio_id' => $audio_id, 'owner_id' => $owner_id));
+
+    if ($sth->fetch())
+      return true;
+    else
+      return false;
+  }
+
+  private function clear_current_audio($user_id) {
+    $this->db->prepare('UPDATE status_audio SET current = NULL WHERE user_id = :user_id AND current IS NOT NULL')
+      ->execute(array('user_id' => $user_id));
+  }
+
+  private function save_current_audio($user_id, StdClass $audio) {
+    try {
+      if (!$this->check_current_audio($user_id, $audio->{'id'}, $audio->{'owner_id'})) {
+        $this->clear_current_audio($user_id);
+        if ($this->save_audio($audio)) {
+          $this->db->prepare('INSERT INTO status_audio (user_id, audio_id, owner_id, current) VALUES (:user_id, :audio_id, :owner_id, 1)')
+            ->execute(array('user_id' => $user_id, 'audio_id' => $audio->{'id'}, 'owner_id' => $audio->{'owner_id'}));
+        }
+      }
+    } catch (Exception $ex) {
+      Logger::log(LOG_ERR, "got exception while saving current audio for $user_id ". $ex->getMessage());
+    }
   }
 
   private function save_user_attr($user_id, $name, $value) {
