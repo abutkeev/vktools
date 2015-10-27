@@ -427,6 +427,8 @@ class vkTools extends vkApi{
           $params[$field] = NULL;
       }
 
+      Logger::log(LOG_INFO, 'Saving audio id: '. $params['id']. ', owner_id: '. $params['owner_id']);
+
       $this->db->prepare('INSERT INTO audio (id, owner_id, artist, title, duration, lyrics_id, album_id, genre_id, created, modified) VALUES (:id, :owner_id, :artist, :title, :duration, :lyrics_id, :album_id, :genre_id, :date, UNIX_TIMESTAMP()) '.
           'ON DUPLICATE KEY UPDATE artist = :artist, title = :title, duration = :duration, lyrics_id = :lyrics_id, album_id = :album_id, genre_id = :genre_id, modified = UNIX_TIMESTAMP(), deleted = NULL')
         ->execute($params);
