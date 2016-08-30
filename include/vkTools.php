@@ -158,8 +158,13 @@ class vkTools extends vkApi{
       return;
     } else {
       if ($db_info && !$info['online']) {
-        $this->db->prepare('UPDATE online SET current = NULL, till = :till where id = :id')->execute(array('id' => $db_info['id'], 'till' => $info['last_seen']));
-        $this->db->commit();
+        if ($info['last_seen'] != 0) {
+          $this->db->prepare('UPDATE online SET current = NULL, till = :till where id = :id')->execute(array('id' => $db_info['id'], 'till' => $info['last_seen']));
+          $this->db->commit();
+        } else {
+          $this->db->prepare('UPDATE online SET current = NULL where id = :id')->execute(array('id' => $db_info['id']));
+          $this->db->commit();
+        }
         return;
       }
       
