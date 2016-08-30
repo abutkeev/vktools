@@ -459,7 +459,7 @@ class tgTools extends TelegramBot\Api\BotApi{
   protected function format_duration($duration) {
     if ($duration > 60*60)
       return gmdate('G:i:s', $duration);
-    elseif ($duration > 60)
+    elseif ($duration >= 60)
       return gmdate('i:s', $duration);
     elseif ($duration != 0)
       return gmdate('s', $duration);
